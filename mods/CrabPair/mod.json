@@ -1,0 +1,18 @@
+{
+    "title":  "Crab Pair",
+    "description":  "Headcrab pair distraction. Silent without Plant Distractor, whose sounds it uses.",
+    "requires":  [
+                     "ModKit"
+                 ],
+    "keys":  [
+                 "F3",
+                 "F4",
+                 "F5",
+                 "F9"
+             ],
+    "version":  "1.0.0",
+    "preset":  true,
+    "load_after":  [
+                       "PlantDistractor"
+                   ]
+}

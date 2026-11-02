@@ -1,0 +1,359 @@
+// The one-click patch: a single program holding the launcher, UE4SS and ModKit. It works out which game folder to
+// patch, moves any mods already installed into the Mods folder, and can undo all of it.
+//   SinSpire-ModLoader-Patch.exe                     Opens the window.
+//   SinSpire-ModLoader-Patch.exe --patch "<folder>"    Patches without a window. The exit code is 0 on success.
+//   SinSpire-ModLoader-Patch.exe --unpatch "<folder>"  Removes the patch without a window.
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Drawing;
+using System.IO;
+using System.IO.Compression;
+using System.Linq;
+using System.Reflection;
+using System.Text.RegularExpressions;
+using System.Windows.Forms;
+
+[assembly: AssemblyProduct("SinSpire Mod Loader Patch")]
+[assembly: AssemblyTitle("Sin Spire Mod Loader Patch")]
+[assembly: AssemblyFileVersion("1.0.0.0")]
+
+namespace SinSpireModLoader
+{
+    static class Patch
+    {
+        const string LoaderProduct = "SinSpire Mod Loader";
+        const long OldMonitorLauncherSize = 6656; // The launcher used before this one has no product name to check.
+        const string ManagerBat = "Mod Manager.bat";
+        static readonly HashSet<string> Ue4ssOwnMods = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "BPML_GenericFunctions", "BPModLoaderMod", "CheatManagerEnablerMod", "ConsoleCommandsMod",
+            "ConsoleEnablerMod", "Keybinds", "LineTraceMod", "SplitScreenMod", "shared",
+        };
+
+        static Stream Resource(string name)
+        {
+            return Assembly.GetExecutingAssembly().GetManifestResourceStream(name);
+        }
+
+        enum Replace { Never, Always, WhenNewer }
+
+        static void ExtractZip(string resource, string to, Replace replace)
+        {
+            using (var zip = new ZipArchive(Resource(resource), ZipArchiveMode.Read))
+            {
+                foreach (ZipArchiveEntry entry in zip.Entries)
+                {
+                    if (entry.Name == "") { continue; }
+                    string path = Path.Combine(to, entry.FullName.Replace('/', '\\'));
+                    if (File.Exists(path))
+                    {
+                        if (replace == Replace.Never) { continue; }
+                        if (replace == Replace.WhenNewer && entry.LastWriteTime.UtcDateTime <= File.GetLastWriteTimeUtc(path).AddSeconds(2)) { continue; }
+                    }
+                    Directory.CreateDirectory(Path.GetDirectoryName(path));
+                    entry.ExtractToFile(path, true);
+                }
+            }
+        }
+
+        static bool IsLauncher(string exe)
+        {
+            return File.Exists(exe) && (FileVersionInfo.GetVersionInfo(exe).ProductName == LoaderProduct
+                || new FileInfo(exe).Length == OldMonitorLauncherSize);
+        }
+
+        static void InstallLauncher(GameFolder game, Action<string> say)
+        {
+            if (!IsLauncher(game.Exe))
+            {
+                // Not a launcher, so it is the real game exe, possibly newer than any earlier backup after a Steam update.
+                if (!File.Exists(game.Exe)) { throw new IOException("SinSpire.exe is missing from " + game.Root); }
+                File.Copy(game.Exe, game.OriginalExe, true);
+                say("Kept the game's own exe as SinSpire-Original.exe.");
+            }
+            else if (!File.Exists(game.OriginalExe))
+            {
+                throw new IOException("SinSpire-Original.exe is missing. Verify the game's files in Steam, then patch again.");
+            }
+            using (Stream from = Resource("launcher.exe"))
+            using (Stream to = File.Create(game.Exe))
+            {
+                from.CopyTo(to);
+            }
+            say("Installed the mod loader as SinSpire.exe.");
+        }
+
+        static bool InstallUe4ss(GameFolder game, Action<string> say)
+        {
+            bool present = File.Exists(Path.Combine(game.Win64, "dwmapi.dll")) && File.Exists(Path.Combine(game.Ue4ss, "UE4SS.dll"));
+            if (present)
+            {
+                say("UE4SS is already installed, so it was left as it is.");
+                return false;
+            }
+            ExtractZip("ue4ss.zip", game.Win64, Replace.Never);
+            say("Installed UE4SS.");
+            return true;
+        }
+
+        // A mod in a folder beside this program comes along, which is how mods reach a second copy of the game.
+        static void BringModsFromBesideThePatch(GameFolder game, Action<string> say)
+        {
+            var beside = new GameFolder(AppDomain.CurrentDomain.BaseDirectory);
+            if (string.Equals(beside.Mods, game.Mods, StringComparison.OrdinalIgnoreCase) || !Directory.Exists(beside.Mods)) { return; }
+            foreach (string dir in Directory.GetDirectories(beside.Mods).Where(d => !Path.GetFileName(d).StartsWith(".")))
+            {
+                string target = Path.Combine(game.Mods, Path.GetFileName(dir));
+                if (Directory.Exists(target)) { continue; }
+                CopyFolder(dir, target);
+                say("Copied " + Path.GetFileName(dir) + ".");
+            }
+            if (File.Exists(beside.ModList) && !File.Exists(game.ModList)) { File.Copy(beside.ModList, game.ModList); }
+        }
+
+        static void CopyFolder(string from, string to)
+        {
+            Directory.CreateDirectory(to);
+            foreach (string file in Directory.GetFiles(from)) { File.Copy(file, Path.Combine(to, Path.GetFileName(file))); }
+            foreach (string dir in Directory.GetDirectories(from)) { CopyFolder(dir, Path.Combine(to, Path.GetFileName(dir))); }
+        }
+
+        // Moves mods installed the old way into Mods\<name>, keeping whether each was turned on.
+        static void AdoptInstalledMods(GameFolder game, Action<string> say)
+        {
+            var disabled = new List<string>();
+            if (Directory.Exists(game.Ue4ssMods))
+            {
+                foreach (string dir in Directory.GetDirectories(game.Ue4ssMods))
+                {
+                    string name = Path.GetFileName(dir);
+                    if (Ue4ssOwnMods.Contains(name) || (File.GetAttributes(dir) & FileAttributes.ReparsePoint) != 0) { continue; }
+                    string target = Path.Combine(game.Mods, name);
+                    if (Directory.Exists(target))
+                    {
+                        say("Left ue4ss\\Mods\\" + name + " where it is, because Mods\\" + name + " already exists.");
+                        continue;
+                    }
+                    if (!File.Exists(Path.Combine(dir, "enabled.txt"))) { disabled.Add(name); }
+                    Directory.Move(dir, target);
+                    say("Moved " + name + " into the Mods folder.");
+                }
+            }
+
+            // Pak files are matched to a mod by name, and a pak with no matching script becomes a mod of its own.
+            if (Directory.Exists(game.PakMods))
+            {
+                foreach (string file in Directory.GetFiles(game.PakMods))
+                {
+                    string extension = Path.GetExtension(file).ToLowerInvariant();
+                    if (extension != ".pak" && extension != ".ucas" && extension != ".utoc" && extension != ".sig") { continue; }
+                    string name = Regex.Replace(Path.GetFileNameWithoutExtension(file), @"^SinSpire-|_P$", "");
+                    string target = Path.Combine(game.Mods, name, "Paks");
+                    Directory.CreateDirectory(target);
+                    File.Move(file, Path.Combine(target, Path.GetFileName(file)));
+                }
+            }
+
+            // ModKit brings its own copy of this library, and two copies would collide.
+            string oldLibrary = Path.Combine(game.Ue4ssShared, "ModSettings");
+            if (Directory.Exists(oldLibrary) && (File.GetAttributes(oldLibrary) & FileAttributes.ReparsePoint) == 0)
+            {
+                Directory.Delete(oldLibrary, true);
+            }
+
+            if (disabled.Count > 0)
+            {
+                List<ModInfo> mods = Registry.Load(game);
+                foreach (ModInfo mod in mods.Where(m => disabled.Contains(m.Name, StringComparer.OrdinalIgnoreCase))) { mod.Enabled = false; }
+                Registry.Save(game, mods);
+            }
+        }
+
+        public static void Apply(GameFolder game, Action<string> say)
+        {
+            if (!game.LooksLikeTheGame) { throw new IOException(game.Root + " does not look like a Sin Spire folder."); }
+            if (game.GameIsRunning()) { throw new IOException("Close the game first."); }
+            Directory.CreateDirectory(game.State);
+            Deployer.Undeploy(game);
+            bool addedUe4ss = InstallUe4ss(game, say);
+            if (!addedUe4ss && File.Exists(game.InstallInfo)) { addedUe4ss = File.ReadAllText(game.InstallInfo).Contains("ue4ss_added=1"); }
+            File.WriteAllText(game.InstallInfo, "ue4ss_added=" + (addedUe4ss ? "1" : "0") + Environment.NewLine);
+
+            ExtractZip("modkit.zip", game.Mods, Replace.Always);
+            BringModsFromBesideThePatch(game, say);
+            AdoptInstalledMods(game, say);
+
+            // Comes after adopting, so an installed copy of a preset is moved in first. A file only gets replaced when
+            // the patch's copy is newer, so a mod rebuilt locally and a player's settings both survive.
+            ExtractZip("presets.zip", game.Mods, Replace.WhenNewer);
+            say("Added the preset mods to the Mods folder.");
+
+            InstallLauncher(game, say);
+            File.WriteAllText(Path.Combine(game.Root, ManagerBat), "@start \"\" \"%~dp0SinSpire.exe\" -modmanager\r\n");
+
+            List<Problem> problems = Deployer.Deploy(game);
+            foreach (Problem problem in problems) { say("Problem: " + problem.Text); }
+            say("Done. " + Registry.Load(game).Count(m => m.Enabled) + " mods are on. Add mods to the Mods folder, and hold Shift while starting the game to choose which ones load.");
+        }
+
+        public static void Remove(GameFolder game, Action<string> say)
+        {
+            if (game.GameIsRunning()) { throw new IOException("Close the game first."); }
+            Deployer.Undeploy(game);
+            Deployer.WriteModsTxt(game, Registry.Load(game), new List<ModInfo>());
+
+            if (IsLauncher(game.Exe) && File.Exists(game.OriginalExe))
+            {
+                File.Delete(game.Exe);
+                File.Move(game.OriginalExe, game.Exe);
+                say("Restored the game's own SinSpire.exe.");
+            }
+            string bat = Path.Combine(game.Root, ManagerBat);
+            if (File.Exists(bat)) { File.Delete(bat); }
+
+            if (File.Exists(game.InstallInfo) && File.ReadAllText(game.InstallInfo).Contains("ue4ss_added=1"))
+            {
+                File.Delete(Path.Combine(game.Win64, "dwmapi.dll"));
+                Directory.Delete(game.Ue4ss, true);
+                File.Delete(game.InstallInfo);
+                say("Removed UE4SS.");
+            }
+            say("Patch removed. Your mods are still in the Mods folder but will not load.");
+        }
+
+        // The folder this program sits in, then every Steam library that has the game.
+        public static List<string> FindGames()
+        {
+            var found = new List<string>();
+            Action<string> consider = folder =>
+            {
+                if (new GameFolder(folder).LooksLikeTheGame && !found.Contains(folder, StringComparer.OrdinalIgnoreCase)) { found.Add(folder); }
+            };
+            consider(AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\'));
+            try
+            {
+                string steam = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Valve\Steam", "SteamPath", null) as string;
+                if (steam != null)
+                {
+                    steam = steam.Replace('/', '\\');
+                    consider(Path.Combine(steam, @"steamapps\common\Sin Spire"));
+                    string libraries = Path.Combine(steam, @"steamapps\libraryfolders.vdf");
+                    if (File.Exists(libraries))
+                    {
+                        foreach (Match match in Regex.Matches(File.ReadAllText(libraries), "\"path\"\\s+\"([^\"]+)\""))
+                        {
+                            consider(Path.Combine(match.Groups[1].Value.Replace(@"\\", @"\"), @"steamapps\common\Sin Spire"));
+                        }
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // With no Steam details, the folder can still be chosen by hand.
+            }
+            return found;
+        }
+    }
+
+    static class PatchProgram
+    {
+        [STAThread]
+        static int Main(string[] args)
+        {
+            if (args.Length == 2 && (args[0] == "--patch" || args[0] == "--unpatch"))
+            {
+                var game = new GameFolder(args[1]);
+                var report = new List<string>();
+                try
+                {
+                    if (args[0] == "--patch") { Patch.Apply(game, report.Add); }
+                    else { Patch.Remove(game, report.Add); }
+                    foreach (string line in report) { game.Log(line); }
+                    return 0;
+                }
+                catch (Exception error)
+                {
+                    report.Add("Failed: " + error);
+                    foreach (string line in report) { game.Log(line); }
+                    return 1;
+                }
+            }
+            Application.EnableVisualStyles();
+            Application.Run(new PatchForm());
+            return 0;
+        }
+    }
+
+    class PatchForm : Form
+    {
+        readonly ComboBox folder = new ComboBox { Dock = DockStyle.Fill };
+        readonly TextBox output = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
+
+        public PatchForm()
+        {
+            Text = "Sin Spire Mod Loader Patch";
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
+            ClientSize = new Size(640, 380);
+            MinimumSize = new Size(480, 300);
+            StartPosition = FormStartPosition.CenterScreen;
+
+            var browse = new Button { Text = "Browse...", AutoSize = true };
+            var patch = new Button { Text = "Patch Game", AutoSize = true };
+            var remove = new Button { Text = "Remove Patch", AutoSize = true };
+            browse.Click += (s, e) =>
+            {
+                using (var dialog = new FolderBrowserDialog { Description = "Choose the Sin Spire folder, the one with SinSpire.exe in it." })
+                {
+                    if (dialog.ShowDialog(this) == DialogResult.OK) { folder.Text = dialog.SelectedPath; }
+                }
+            };
+            patch.Click += (s, e) => Run(Patch.Apply);
+            remove.Click += (s, e) =>
+            {
+                if (MessageBox.Show(this, "Remove the mod loader from this game? Your Mods folder is kept.", Text, MessageBoxButtons.OKCancel) == DialogResult.OK)
+                {
+                    Run(Patch.Remove);
+                }
+            };
+
+            var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, FlowDirection = FlowDirection.RightToLeft };
+            buttons.Controls.AddRange(new Control[] { patch, remove });
+            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 4, Padding = new Padding(8) };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            var label = new Label { Text = "Game folder", AutoSize = true };
+            layout.Controls.Add(label, 0, 0);
+            layout.SetColumnSpan(label, 2);
+            layout.Controls.Add(folder, 0, 1);
+            layout.Controls.Add(browse, 1, 1);
+            layout.Controls.Add(output, 0, 2);
+            layout.SetColumnSpan(output, 2);
+            layout.Controls.Add(buttons, 0, 3);
+            layout.SetColumnSpan(buttons, 2);
+            Controls.Add(layout);
+
+            foreach (string game in Patch.FindGames()) { folder.Items.Add(game); }
+            if (folder.Items.Count > 0) { folder.SelectedIndex = 0; }
+        }
+
+        void Run(Action<GameFolder, Action<string>> action)
+        {
+            output.Clear();
+            Action<string> say = line => { output.AppendText(line + Environment.NewLine); output.Update(); };
+            try
+            {
+                action(new GameFolder(folder.Text), say);
+            }
+            catch (Exception error)
+            {
+                say("Failed: " + error.Message);
+            }
+        }
+    }
+}

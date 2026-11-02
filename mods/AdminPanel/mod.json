@@ -1,0 +1,15 @@
+{
+    "load_after":  [
+                       "PlantDistractor",
+                       "CrabPair",
+                       "NurseTouch"
+                   ],
+    "title":  "Admin Panel",
+    "description":  "Cheat panel. F8 opens it, Esc closes it.",
+    "keys":  [
+                 "F8",
+                 "Esc"
+             ],
+    "version":  "1.0.0",
+    "preset":  true
+}

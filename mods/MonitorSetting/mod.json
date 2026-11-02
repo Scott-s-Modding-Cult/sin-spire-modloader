@@ -1,0 +1,6 @@
+{
+    "title":  "Monitor Setting",
+    "description":  "Adds a Monitor row to the video settings.",
+    "version":  "1.0.0",
+    "preset":  true
+}

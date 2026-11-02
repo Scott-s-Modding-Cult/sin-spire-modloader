@@ -1,0 +1,9 @@
+{
+    "title":  "Plant Distractor",
+    "description":  "Plant pair distraction placed in each level, with a volume slider.",
+    "requires":  [
+                     "ModKit"
+                 ],
+    "version":  "1.0.0",
+    "preset":  true
+}

@@ -1,0 +1,22 @@
+build/
+dist/
+
+# Never commit game files or UE4SS binaries.
+*.exe
+*.dll
+*.ico
+*.log
+*.uasset
+*.uexp
+
+# Pak files belong only to the preset mods.
+*.pak
+*.ucas
+*.utoc
+*.sig
+!mods/*/Paks/*
+
+# Each player's own mod settings.
+mods/**/settings.txt
+mods/**/monitor.txt
+mods/**/monitors.txt
