@@ -56,14 +56,13 @@ function ModKit.new(name)
 
     function mod.loop(milliseconds, fn)
         local errors = 0
-        LoopAsync(milliseconds, function()
+        -- On the game thread throughout: LoopAsync runs Lua on another thread at the same time, which corrupts the Lua state.
+        LoopInGameThreadWithDelay(milliseconds, function()
             if errors >= MAX_LOOP_ERRORS then return true end
-            ExecuteInGameThread(function()
-                if not mod.try(fn) then
-                    errors = errors + 1
-                    if errors >= MAX_LOOP_ERRORS then mod.log("Loop stopped after repeated errors.") end
-                end
-            end)
+            if not mod.try(fn) then
+                errors = errors + 1
+                if errors >= MAX_LOOP_ERRORS then mod.log("Loop stopped after repeated errors.") end
+            end
             return false
         end)
     end

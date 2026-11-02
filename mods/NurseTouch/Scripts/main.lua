@@ -301,14 +301,12 @@ local function wake(nurse, entry, reason)
     if nurse.Controller:IsValid() and nurse.Controller.BrainComponent:IsValid() then
         nurse.Controller.BrainComponent:RestartLogic()
     end
-    ExecuteWithDelay(WAKE_TARGET_DELAY_MS, function()
-        ExecuteInGameThread(function()
-            local player = current_player()
-            local now = live_nurses()[address]
-            if player and now then
-                target_player(now, player)
-            end
-        end)
+    ExecuteInGameThreadWithDelay(WAKE_TARGET_DELAY_MS, function()
+        local player = current_player()
+        local now = live_nurses()[address]
+        if player and now then
+            target_player(now, player)
+        end
     end)
 end
 
@@ -608,21 +606,18 @@ local function check_level_change()
     return true
 end
 
-LoopAsync(TICK_MS, function()
-    ExecuteInGameThread(function()
-        if not check_level_change() then
-            return
-        end
-        elapsed_seconds = elapsed_seconds + TICK_MS / 1000.0
-        local player = current_player()
-        update_level_plan(player)
-        local live = live_nurses()
-        local shaft_actors = live_shafts()
-        clean_up_shafts(live, shaft_actors)
-        watch_active(live, player, shaft_actors)
-        check_new_nurses(live, player)
-    end)
-    return false
+LoopInGameThreadWithDelay(TICK_MS, function()
+    if not check_level_change() then
+        return
+    end
+    elapsed_seconds = elapsed_seconds + TICK_MS / 1000.0
+    local player = current_player()
+    update_level_plan(player)
+    local live = live_nurses()
+    local shaft_actors = live_shafts()
+    clean_up_shafts(live, shaft_actors)
+    watch_active(live, player, shaft_actors)
+    check_new_nurses(live, player)
 end)
 
 math.randomseed(os.time())

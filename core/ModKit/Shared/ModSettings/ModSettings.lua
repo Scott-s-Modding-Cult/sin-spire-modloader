@@ -286,10 +286,7 @@ function ModSettings.StartPolling()
         return
     end
     polling = true
-    LoopAsync(POLL_MS, function()
-        ExecuteInGameThread(ModSettings.Poll)
-        return false
-    end)
+    LoopInGameThreadWithDelay(POLL_MS, ModSettings.Poll)
 end
 
 function ModSettings.AddSlider(options)

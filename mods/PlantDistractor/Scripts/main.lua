@@ -766,22 +766,19 @@ local function current_world()
     return world
 end
 
-LoopAsync(TICK_MS, function()
-    ExecuteInGameThread(function()
-        -- A script error here would otherwise stop this loop for the rest of the session.
-        local ok, problem = pcall(function()
-            if current_world() then
-                update_level_plan()
-                update_spawn_requests()
-                update_pairs()
-            end
-        end)
-        if not ok then
-            log("Tick failed, trying again: " .. tostring(problem))
+LoopInGameThreadWithDelay(TICK_MS, function()
+    -- A script error here would otherwise stop this loop for the rest of the session.
+    local ok, problem = pcall(function()
+        if current_world() then
+            update_level_plan()
+            update_spawn_requests()
+            update_pairs()
         end
-        ModSettings.Poll()
     end)
-    return false
+    if not ok then
+        log("Tick failed, trying again: " .. tostring(problem))
+    end
+    ModSettings.Poll()
 end)
 
 math.randomseed(os.time())

@@ -214,9 +214,6 @@ if not io.open(MONITOR_FILE, "r") then
 end
 start_helper()
 
-LoopAsync(POLL_MS, function()
-    ExecuteInGameThread(update_setting)
-    return false
-end)
+LoopInGameThreadWithDelay(POLL_MS, update_setting)
 
 log("Loaded, monitor " .. read_monitor())

@@ -390,10 +390,6 @@ local function close_panel()
     log("Closed")
 end
 
-local function queue_close()
-    ExecuteInGameThread(close_panel)
-end
-
 local function build_panel(controller)
     local host = widget_library():Create(controller, StaticFindObject(BUTTON_CLASS), controller)
     local tree = host.WidgetTree
@@ -563,24 +559,21 @@ end
 
 RegisterKeyBind(Key.ESCAPE, function()
     if panel then
-        ExecuteWithDelay(ESCAPE_CLOSE_DELAY_MS, queue_close)
+        ExecuteInGameThreadWithDelay(ESCAPE_CLOSE_DELAY_MS, close_panel)
     end
 end)
 
-LoopAsync(TICK_MS, function()
-    ExecuteInGameThread(function()
-        local ok, message = pcall(tick)
-        if ok then
-            return
-        end
-        -- This runs 20 times a second, so one failure must not flood the log.
-        if error_cooldown <= 0 then
-            log("Error: " .. tostring(message))
-            error_cooldown = LOOPS_UNTIL_ERROR_IS_REPEATED
-        end
-        error_cooldown = error_cooldown - 1
-    end)
-    return false
+LoopInGameThreadWithDelay(TICK_MS, function()
+    local ok, message = pcall(tick)
+    if ok then
+        return
+    end
+    -- This runs 20 times a second, so one failure must not flood the log.
+    if error_cooldown <= 0 then
+        log("Error: " .. tostring(message))
+        error_cooldown = LOOPS_UNTIL_ERROR_IS_REPEATED
+    end
+    error_cooldown = error_cooldown - 1
 end)
 
 log("Loaded, the pause menu opens the panel")

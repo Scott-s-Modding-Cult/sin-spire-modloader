@@ -18,7 +18,10 @@ using System;
 using System.Runtime.InteropServices;
 public static class SinSpireWindow {
     [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
+    [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+    [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr hWnd, out RECT rect);
+    [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr hWnd, ref POINT point);
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
 }
 "@
@@ -42,19 +45,33 @@ function Is-ExclusiveFullscreen {
 function Move-Game($hwnd, $monitor) {
     $rect = New-Object SinSpireWindow+RECT
     [void][SinSpireWindow]::GetWindowRect($hwnd, [ref]$rect)
-    $width = $rect.Right - $rect.Left
-    $height = $rect.Bottom - $rect.Top
+    $client = New-Object SinSpireWindow+RECT
+    [void][SinSpireWindow]::GetClientRect($hwnd, [ref]$client)
+    $corner = New-Object SinSpireWindow+POINT
+    [void][SinSpireWindow]::ClientToScreen($hwnd, [ref]$corner)
+    $clientWidth = $client.Right
+    $clientHeight = $client.Bottom
+    # The game's window keeps its title bar even when it fills a monitor: the plain game opens with the bar above the top
+    # of the screen. So it is the picture that gets placed on the monitor, and the frame goes wherever that puts it.
+    $frameLeft = $corner.X - $rect.Left
+    $frameTop = $corner.Y - $rect.Top
+    $extraWidth = ($rect.Right - $rect.Left) - $clientWidth
+    $extraHeight = ($rect.Bottom - $rect.Top) - $clientHeight
     $target = $monitor.Bounds
-    if ($rect.Left -eq $target.X -and $rect.Top -eq $target.Y -and $width -eq $target.Width -and $height -eq $target.Height) { return }
+    if ($corner.X -eq $target.X -and $corner.Y -eq $target.Y -and $clientWidth -eq $target.Width -and $clientHeight -eq $target.Height) { return }
 
-    # A borderless window fills its monitor, so it takes the new monitor's size. A smaller window keeps its size.
-    $fills = $null -ne ($monitors | Where-Object { $_.Bounds.Width -eq $width -and $_.Bounds.Height -eq $height })
+    # A window filling a monitor takes the new monitor's size. A smaller window keeps its size.
+    $fills = $null -ne ($monitors | Where-Object { $_.Bounds.Width -eq $clientWidth -and $_.Bounds.Height -eq $clientHeight })
     if ($fills) {
-        $x, $y, $width, $height = $target.X, $target.Y, $target.Width, $target.Height
+        $clientX, $clientY, $clientWidth, $clientHeight = $target.X, $target.Y, $target.Width, $target.Height
     } else {
-        $x = $target.X + [Math]::Max(0, ($target.Width - $width) / 2)
-        $y = $target.Y + [Math]::Max(0, ($target.Height - $height) / 2)
+        $clientX = $target.X + [Math]::Max(0, ($target.Width - $clientWidth) / 2)
+        $clientY = $target.Y + [Math]::Max(0, ($target.Height - $clientHeight) / 2)
     }
+    $x = $clientX - $frameLeft
+    $y = $clientY - $frameTop
+    $width = $clientWidth + $extraWidth
+    $height = $clientHeight + $extraHeight
     # SWP_NOZORDER | SWP_NOACTIVATE, so the move does not change which window has focus.
     $moved = [SinSpireWindow]::SetWindowPos($hwnd, [IntPtr]::Zero, [int]$x, [int]$y, [int]$width, [int]$height, 0x0014)
     Log "Moved to monitor $($monitor.Number) at $x,$y ${width}x$height ok=$moved"

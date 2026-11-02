@@ -339,15 +339,13 @@ local function wake_pair(pair, live, reason)
     release(a, pair.saved_a)
     release(b, pair.saved_b)
     local a_address, b_address = pair.a_address, pair.b_address
-    ExecuteWithDelay(WAKE_TARGET_DELAY_MS, function()
-        ExecuteInGameThread(function()
-            local player = current_player()
-            if player then
-                local now = live_ghosts()
-                target_player(now[a_address], player)
-                target_player(now[b_address], player)
-            end
-        end)
+    ExecuteInGameThreadWithDelay(WAKE_TARGET_DELAY_MS, function()
+        local player = current_player()
+        if player then
+            local now = live_ghosts()
+            target_player(now[a_address], player)
+            target_player(now[b_address], player)
+        end
     end)
 end
 
@@ -430,25 +428,22 @@ local function check_level_change()
     return true
 end
 
-LoopAsync(TICK_MS, function()
-    ExecuteInGameThread(function()
-        if not check_level_change() then
-            return
+LoopInGameThreadWithDelay(TICK_MS, function()
+    if not check_level_change() then
+        return
+    end
+    local live = live_ghosts()
+    tick_count = tick_count + 1
+    if tick_count % WATCH_EVERY_TICKS == 0 then
+        watch_pairs(live)
+        check_new_ghosts(live)
+    end
+    for _, pair in ipairs(active_pairs) do
+        local ghost = live[pair.a_address]
+        if ghost then
+            update_audio(pair, ghost)
         end
-        local live = live_ghosts()
-        tick_count = tick_count + 1
-        if tick_count % WATCH_EVERY_TICKS == 0 then
-            watch_pairs(live)
-            check_new_ghosts(live)
-        end
-        for _, pair in ipairs(active_pairs) do
-            local ghost = live[pair.a_address]
-            if ghost then
-                update_audio(pair, ghost)
-            end
-        end
-    end)
-    return false
+    end
 end)
 
 math.randomseed(os.time())

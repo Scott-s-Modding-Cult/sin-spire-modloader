@@ -362,22 +362,19 @@ local function update_audio(pair, live, player)
     end
 end
 
-LoopAsync(TICK_MS, function()
-    ExecuteInGameThread(function()
-        if not check_level_change() then
-            return
+LoopInGameThreadWithDelay(TICK_MS, function()
+    if not check_level_change() then
+        return
+    end
+    elapsed_seconds = elapsed_seconds + TICK_MS / 1000.0
+    update_level_plan()
+    if #pairs_list > 0 then
+        local live = live_actors()
+        local player = current_player()
+        for _, pair in ipairs(pairs_list) do
+            update_audio(pair, live, player)
         end
-        elapsed_seconds = elapsed_seconds + TICK_MS / 1000.0
-        update_level_plan()
-        if #pairs_list > 0 then
-            local live = live_actors()
-            local player = current_player()
-            for _, pair in ipairs(pairs_list) do
-                update_audio(pair, live, player)
-            end
-        end
-    end)
-    return false
+    end
 end)
 
 math.randomseed(os.time())

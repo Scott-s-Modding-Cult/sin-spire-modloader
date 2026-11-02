@@ -216,20 +216,17 @@ local function tick()
     animate(player, mesh)
 end
 
-LoopAsync(TICK_MS, function()
-    ExecuteInGameThread(function()
-        local ok, message = pcall(tick)
-        if ok then
-            return
-        end
-        -- This runs 20 times a second, so one failure must not flood the log.
-        if error_cooldown <= 0 then
-            log("Error: " .. tostring(message))
-            error_cooldown = LOOPS_UNTIL_ERROR_IS_REPEATED
-        end
-        error_cooldown = error_cooldown - 1
-    end)
-    return false
+LoopInGameThreadWithDelay(TICK_MS, function()
+    local ok, message = pcall(tick)
+    if ok then
+        return
+    end
+    -- This runs 20 times a second, so one failure must not flood the log.
+    if error_cooldown <= 0 then
+        log("Error: " .. tostring(message))
+        error_cooldown = LOOPS_UNTIL_ERROR_IS_REPEATED
+    end
+    error_cooldown = error_cooldown - 1
 end)
 
 log("Loaded")
