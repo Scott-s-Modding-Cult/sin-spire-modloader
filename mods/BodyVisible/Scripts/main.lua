@@ -1,4 +1,4 @@
--- Shows the player's full body in first person, walking with the player. F6 turns it on and off.
+-- Shows the player's full body in first person, walking with the player.
 --
 -- The game keeps the body mesh hidden in normal play and only shows it during interactions, so this mod steps
 -- aside whenever one is running and the game's own scenes play untouched. The body's arms hang at its sides,
@@ -27,7 +27,6 @@ local MAX_TURN_DEG = 70.0 -- The legs turn toward a sideways step, and past this
 local BACKWARD_DEG = 100.0
 local TURN_SHARE_PER_TICK = 0.25
 
-local enabled = true
 local state = nil -- { address, showing, rest, standing, clip, montage, turn }
 local error_cooldown = 0
 
@@ -198,16 +197,6 @@ local function tick()
         return
     end
 
-    if not enabled then
-        if state.showing then
-            stop_showing(mesh)
-            state.turn = 0.0
-            set_turn(mesh, 0.0)
-            mesh:SetVisibility(false, false)
-        end
-        return
-    end
-
     if not state.rest then
         state.rest = read_rest(mesh)
         log(string.format("Body found, yaw %.1f, walk speed %.0f", state.rest.Yaw, player.WalkSpeed or 0.0))
@@ -227,11 +216,6 @@ local function tick()
     animate(player, mesh)
 end
 
-RegisterKeyBind(Key.F6, function()
-    enabled = not enabled
-    log(enabled and "On" or "Off")
-end)
-
 LoopAsync(TICK_MS, function()
     ExecuteInGameThread(function()
         local ok, message = pcall(tick)
@@ -248,4 +232,4 @@ LoopAsync(TICK_MS, function()
     return false
 end)
 
-log("Loaded, F6 turns the body on and off")
+log("Loaded")

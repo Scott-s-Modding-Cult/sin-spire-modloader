@@ -1,6 +1,4 @@
 -- LostSoul ghosts sometimes spawn as a kissing pair, and only notice the player at very close range.
--- Press F7 to pair the two nearest free ghosts as well, spawning two in front of the player if the level
--- has fewer than two. Press F7 again to release them, or remove the spawned pair.
 --
 -- The game can delete any object and reuse its memory at any moment, and calling a function on a deleted
 -- object crashes it. So nothing here keeps a game object between ticks: ghosts are remembered by address and
@@ -432,69 +430,6 @@ local function check_level_change()
     return true
 end
 
-local function start_kiss(live)
-    local anim = load_anim()
-    if not anim then
-        return
-    end
-    local a, b = nearest_two_ghosts(live)
-    local spawned = false
-    if not a then
-        a, b = spawn_ghost(-1), spawn_ghost(1)
-        spawned = true
-    end
-    if not a or not b then
-        log("Could not find or spawn two LostSoul ghosts")
-        log_characters()
-        if a then
-            a:K2_DestroyActor()
-        end
-        if b then
-            b:K2_DestroyActor()
-        end
-        return
-    end
-    local from = a.Mesh:K2_GetComponentLocation()
-    local to = b.Mesh:K2_GetComponentLocation()
-    local yaw = math.deg(math.atan(to.Y - from.Y, to.X - from.X))
-    local centre = { X = (from.X + to.X) / 2, Y = (from.Y + to.Y) / 2, Z = (from.Z + to.Z) / 2 }
-    begin_pair(a, b, centre, yaw, anim, { manual = true, spawned = spawned })
-    log(spawned and "Kissing (spawned two ghosts)" or "Kissing")
-end
-
-local function stop_kiss(pair, live)
-    remove_pair(pair)
-    local a, b = live[pair.a_address], live[pair.b_address]
-    if pair.spawned then
-        if a then
-            a:K2_DestroyActor()
-        end
-        if b then
-            b:K2_DestroyActor()
-        end
-    else
-        release(a, pair.saved_a)
-        release(b, pair.saved_b)
-    end
-    log("Released")
-end
-
-RegisterKeyBind(Key.F7, function()
-    ExecuteInGameThread(function()
-        if not check_level_change() then
-            return
-        end
-        local live = live_ghosts()
-        for _, pair in ipairs(active_pairs) do
-            if pair.manual then
-                stop_kiss(pair, live)
-                return
-            end
-        end
-        start_kiss(live)
-    end)
-end)
-
 LoopAsync(TICK_MS, function()
     ExecuteInGameThread(function()
         if not check_level_change() then
@@ -517,4 +452,4 @@ LoopAsync(TICK_MS, function()
 end)
 
 math.randomseed(os.time())
-log("Loaded. Press F7 in a level.")
+log("Loaded.")

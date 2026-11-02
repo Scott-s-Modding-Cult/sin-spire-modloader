@@ -2,8 +2,7 @@
 -- Pairs appear at random spots when a level loads, and Free Mode always has at least one.
 -- Every so often a pair gets excited and slams once, less often the lower crab fights to get away and is held back, and
 -- less often still it climaxes. Rarely it breaks free and runs, is chased down, and is caught, if the pair has room.
--- Press F5 to make every pair slam, F4 to make every pair climax, F9 to make every pair struggle, or F3 to make every pair
--- chase, at its next chance.
+-- Press F9 to make every pair struggle at its next chance.
 --
 -- The game can delete any object and reuse its memory at any moment, so nothing here keeps a game object between
 -- ticks: pairs are remembered by address and looked up fresh from the game's live list.
@@ -254,12 +253,10 @@ end
 
 local function plan_slam(pair)
     pair.slam_clock = os.clock() + random_between(SLAM.min_wait_seconds, SLAM.max_wait_seconds)
-    pair.slam_forced = false
 end
 
 local function plan_climax(pair)
     pair.climax_clock = os.clock() + random_between(CLIMAX.min_wait_seconds, CLIMAX.max_wait_seconds)
-    pair.climax_forced = false
 end
 
 local function plan_struggle(pair)
@@ -269,7 +266,6 @@ end
 
 local function plan_chase(pair)
     pair.chase_clock = os.clock() + random_between(CHASE.min_wait_seconds, CHASE.max_wait_seconds)
-    pair.chase_forced = false
 end
 
 local function spawn_pair(target, heading)
@@ -705,16 +701,16 @@ local function update_pair(pair, live_pair, player_location)
         return
     end
     local now = os.clock()
-    if try_start(pair, live_pair, CLIMAX, pair.climax_forced or now >= pair.climax_clock, position) then
+    if try_start(pair, live_pair, CLIMAX, now >= pair.climax_clock, position) then
         return
     end
-    if try_start(pair, live_pair, CHASE, pair.chase_forced or now >= pair.chase_clock, position) then
+    if try_start(pair, live_pair, CHASE, now >= pair.chase_clock, position) then
         return
     end
     if try_start(pair, live_pair, STRUGGLE, pair.struggle_forced or now >= pair.struggle_clock, position) then
         return
     end
-    try_start(pair, live_pair, SLAM, pair.slam_forced or now >= pair.slam_clock, position)
+    try_start(pair, live_pair, SLAM, now >= pair.slam_clock, position)
 end
 
 local function update_pairs()
@@ -749,39 +745,12 @@ local function current_world()
     return world
 end
 
-RegisterKeyBind(Key.F4, function()
-    ExecuteInGameThread(function()
-        for _, pair in ipairs(pairs_list) do
-            pair.climax_forced = true
-        end
-        log("Climax requested")
-    end)
-end)
-
-RegisterKeyBind(Key.F5, function()
-    ExecuteInGameThread(function()
-        for _, pair in ipairs(pairs_list) do
-            pair.slam_forced = true
-        end
-        log("Slam requested")
-    end)
-end)
-
 RegisterKeyBind(Key.F9, function()
     ExecuteInGameThread(function()
         for _, pair in ipairs(pairs_list) do
             pair.struggle_forced = true
         end
         log("Struggle requested")
-    end)
-end)
-
-RegisterKeyBind(Key.F3, function()
-    ExecuteInGameThread(function()
-        for _, pair in ipairs(pairs_list) do
-            pair.chase_forced = true
-        end
-        log("Chase requested")
     end)
 end)
 
@@ -804,4 +773,4 @@ LoopAsync(TICK_MS, function()
 end)
 
 math.randomseed(os.time())
-log("Loaded. Pairs appear on their own. F5 makes them slam, F4 makes them climax, F9 makes them struggle, and F3 makes them chase.")
+log("Loaded. Pairs appear on their own. F9 makes them struggle.")

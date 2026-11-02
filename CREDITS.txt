@@ -42,6 +42,12 @@ saliva_strings_v2.0.blend, author not yet identified
   Licence terms not yet confirmed.
 
 
+Yasu's Backrooms Material Pack by @mvyasu
+  Licence: CC BY 4.0, https://creativecommons.org/licenses/by/4.0/
+  Used in: Backrooms (a download on the Releases page, not in this repository)
+  Changes: resized and converted for the game.
+
+
 GAME AND TOOLS
 
 Sin Spire, by its developers

@@ -1,9 +1,6 @@
 {
-    "title":  "Body Visible",
-    "description":  "First-person body with walk, idle and crouch clips.",
-    "keys":  [
-                 "F6"
-             ],
-    "version":  "1.0.0",
-    "preset":  true
+    "title": "Body Visible",
+    "description": "First-person body with walk, idle and crouch clips.",
+    "version": "1.0.0",
+    "preset": true
 }

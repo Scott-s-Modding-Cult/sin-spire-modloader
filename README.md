@@ -10,11 +10,11 @@ The mods in `mods\` come with the patch and appear in the Mod Manager, where eac
 
 | Mod | What it does | Keys |
 | --- | --- | --- |
-| Admin Panel | Cheat panel | F8, Esc |
-| Body Visible | First-person body with walk, idle and crouch clips | F6 |
-| Crab Pair | Headcrab pair distraction. Silent without Plant Distractor, whose sounds it uses | F3, F4, F5, F9 |
+| Admin Panel | Cheat panel, opened from a button in the pause menu | Esc |
+| Body Visible | First-person body with walk, idle and crouch clips | |
+| Crab Pair | Headcrab pair distraction. Silent without Plant Distractor, whose sounds it uses | F9 |
 | Creeper Pair | Creeper pair distraction for TutorialCave and Free Mode. Off by default | |
-| Ghost Kiss | LostSoul kiss | F7 |
+| Ghost Kiss | LostSoul kiss | |
 | Monitor Setting | Adds a Monitor row to the video settings | |
 | Nurse Touch | Twisted Nurse variation | |
 | Plant Distractor | Plant pair distraction placed in each level, with a volume slider | |
@@ -125,6 +125,10 @@ The slider adds a saved row to the game's settings menu. Read `volume.value` to 
 ## Testing
 
 `tests\test_patch.ps1` runs the patch and launcher against a fake game folder in your temp directory, with no real game files involved. Build first. Holding Shift while it runs opens the Mod Manager, which the test closes before trying again.
+
+## Mod downloads
+
+Some mods are also on the [Releases page](https://github.com/scottricity/sin-spire-modloader/releases) as zips, including ones too big to keep in this repository, such as Backrooms. With the patch installed, unzip one into the game's `Mods` folder and it appears in the Mod Manager. `make_release_zips.ps1` makes the zips.
 
 ## Credits
 

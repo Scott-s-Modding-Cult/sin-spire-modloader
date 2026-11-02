@@ -1,5 +1,5 @@
--- Admin panel. F8 opens and closes it, Esc also closes it. While it is open the game is paused and the
--- player and controller get no input, so nothing typed or clicked in the panel reaches the game.
+-- Admin panel. A button in the pause menu opens and closes it, and its Close button and Esc also close it. While it is
+-- open the player and controller get no input, so nothing typed or clicked in the panel reaches the game.
 --
 -- The panel reuses the game's settings rows and menu buttons, hosted in a menu button whose contents are
 -- replaced. Nothing here keeps a game object between ticks: the game can delete any object and reuse its
@@ -8,6 +8,8 @@
 local SPINNER_CLASS = "/Game/Blueprints/UI/Menu/Settings/BPW_SettingsSpinner.BPW_SettingsSpinner_C"
 local BUTTON_CLASS = "/Game/Blueprints/UI/Menu/BPW_GenericMenuButton.BPW_GenericMenuButton_C"
 local BUTTON_SHORT_CLASS = "BPW_GenericMenuButton_C"
+local PAUSE_MENU_SHORT_CLASS = "BPW_PauseMenu_C"
+local PAUSE_BUTTON_LABEL = "Admin Panel"
 local BUTTON_PRESSED_HOOK = BUTTON_CLASS
     .. ":BndEvt__BPW_GenericMenuButton_Button_14_K2Node_ComponentBoundEvent_0_OnButtonPressedEvent__DelegateSignature"
 local TICK_MS = 50
@@ -22,6 +24,8 @@ local LOOPS_UNTIL_ERROR_IS_REPEATED = 200
 local PLANT_REQUESTS_VARIABLE = "PlantDistractor_SpawnRequests"
 -- CrabPair does the same with this one.
 local CRAB_REQUESTS_VARIABLE = "CrabPair_SpawnRequests"
+-- The Backrooms mod watches this count, and goes there once the panel has closed.
+local BACKROOMS_REQUESTS_VARIABLE = "Backrooms_EnterRequests"
 -- NurseTouch reads this each time the futa nurse's cum effect fires.
 local CUM_YAW_VARIABLE = "NurseTouch_CumYaw"
 local CUM_YAW_STEP = 15
@@ -48,6 +52,7 @@ local rows = {
 
 local panel = nil -- { address, row_addresses, button_actions, settle }
 local hook_registered = false
+local pause_button = nil -- { menu_address, button_address }
 local speed_scale = { WalkSpeed = {}, SprintSpeed = {} }
 local accel_scale = {}
 local jump_scale = {}
@@ -264,6 +269,12 @@ local function spawn_plant_pair()
     log("Asked for a random plant pair, request " .. requests)
 end
 
+local function enter_backrooms()
+    local requests = (ModRef:GetSharedVariable(BACKROOMS_REQUESTS_VARIABLE) or 0) + 1
+    ModRef:SetSharedVariable(BACKROOMS_REQUESTS_VARIABLE, requests)
+    log("Asked to enter the Backrooms, request " .. requests)
+end
+
 local function spawn_crab_pair()
     local requests = (ModRef:GetSharedVariable(CRAB_REQUESTS_VARIABLE) or 0) + 1
     ModRef:SetSharedVariable(CRAB_REQUESTS_VARIABLE, requests)
@@ -338,6 +349,16 @@ local function find_host()
     return nil
 end
 
+-- The pause menu the panel was opened from, if it is still up.
+local function open_pause_menu()
+    for _, menu in ipairs(FindAllOf(PAUSE_MENU_SHORT_CLASS) or {}) do
+        if menu:IsValid() and not menu.IsStartMenu and menu:IsInViewport() then
+            return menu
+        end
+    end
+    return nil
+end
+
 local function close_panel()
     if not panel then
         return
@@ -355,32 +376,22 @@ local function close_panel()
         if player then
             player:EnableInput(controller)
         end
-        widget_library():SetInputMode_GameOnly(controller, true)
-        controller.bShowMouseCursor = false
-        statics():SetGamePaused(controller, false)
+        local menu = open_pause_menu()
+        if menu then
+            -- Back to the pause menu, which keeps the game paused and the cursor showing.
+            widget_library():SetInputMode_GameAndUIEx(controller, menu, INPUT_LOCK_NONE, false, false)
+            menu:SetUserFocus(controller)
+        else
+            widget_library():SetInputMode_GameOnly(controller, true)
+            controller.bShowMouseCursor = false
+            statics():SetGamePaused(controller, false)
+        end
     end
     log("Closed")
 end
 
 local function queue_close()
     ExecuteInGameThread(close_panel)
-end
-
-local function register_button_hook()
-    if hook_registered then
-        return
-    end
-    hook_registered = true
-    RegisterHook(BUTTON_PRESSED_HOOK, function(context)
-        if not panel then
-            return
-        end
-        -- Actions wait for the next game thread step, as Close removes the button being pressed.
-        local action = panel.button_actions[context:get():GetAddress()]
-        if action then
-            ExecuteInGameThread(action)
-        end
-    end)
 end
 
 local function build_panel(controller)
@@ -415,6 +426,7 @@ local function build_panel(controller)
     result.button_actions[add_button(box, controller, "Kill All Enemies")] = kill_enemies
     result.button_actions[add_button(box, controller, "Spawn Random Plant Pair")] = spawn_plant_pair
     result.button_actions[add_button(box, controller, "Spawn Random Crab Pair")] = spawn_crab_pair
+    result.button_actions[add_button(box, controller, "Enter the Backrooms")] = enter_backrooms
     result.button_actions[add_button(box, controller, "Close")] = close_panel
 
     tree.RootWidget = root
@@ -430,22 +442,73 @@ local function open_panel()
         log("No player to open the panel for")
         return
     end
-    -- A visible cursor means another menu owns the input, and closing here would break it.
-    if statics():IsGamePaused(controller) or controller.bShowMouseCursor then
-        log("Another menu is open")
-        return
-    end
-    register_button_hook()
     local host, built = build_panel(controller)
     local player = current_player()
     host:AddToViewport(50)
     panel = built
-    statics():SetGamePaused(controller, true)
     controller:DisableInput(controller)
     player:DisableInput(controller)
     widget_library():SetInputMode_UIOnlyEx(controller, host, INPUT_LOCK_NONE, true)
     controller.bShowMouseCursor = true
     log("Opened")
+end
+
+local function toggle_panel()
+    if panel then
+        close_panel()
+    else
+        open_panel()
+    end
+end
+
+local function register_button_hook()
+    if hook_registered then
+        return
+    end
+    hook_registered = true
+    RegisterHook(BUTTON_PRESSED_HOOK, function(context)
+        local address = context:get():GetAddress()
+        -- Actions wait for the next game thread step, as Close removes the button being pressed.
+        if pause_button and address == pause_button.button_address then
+            ExecuteInGameThread(toggle_panel)
+        elseif panel and panel.button_actions[address] then
+            ExecuteInGameThread(panel.button_actions[address])
+        end
+    end)
+end
+
+-- The controller makes one pause menu per level and shows and hides it, so the button goes in once per menu.
+local function update_pause_button()
+    local controller = current_controller()
+    if not controller then
+        return
+    end
+    for _, menu in ipairs(FindAllOf(PAUSE_MENU_SHORT_CLASS) or {}) do
+        if menu:IsValid() and not menu.IsStartMenu and menu.ResumeButt:IsValid() then
+            if pause_button and pause_button.menu_address == menu:GetAddress() then
+                return
+            end
+            local parent = menu.ResumeButt:GetParent()
+            if not valid(parent) then
+                return
+            end
+            register_button_hook()
+            local button = widget_library():Create(controller, StaticFindObject(BUTTON_CLASS), controller)
+            local slot = parent:AddChild(button)
+            local model = menu.ResumeButt.Slot
+            -- Sits like the buttons around it. Only a vertical box has these, so another parent just keeps its defaults.
+            pcall(function()
+                slot:SetPadding(model.Padding)
+                slot:SetHorizontalAlignment(model.HorizontalAlignment)
+                slot:SetVerticalAlignment(model.VerticalAlignment)
+                slot:SetSize(model.Size)
+            end)
+            button.TextBlock_0:SetText(FText(PAUSE_BUTTON_LABEL))
+            pause_button = { menu_address = menu:GetAddress(), button_address = button:GetAddress() }
+            log("Added the pause menu button to a " .. parent:GetClass():GetFName():ToString())
+            return
+        end
+    end
 end
 
 local function update_panel()
@@ -492,20 +555,11 @@ local function update_panel()
 end
 
 local function tick()
+    update_pause_button()
     update_panel()
     send_cum_yaw()
     apply_cheats()
 end
-
-RegisterKeyBind(Key.F8, function()
-    ExecuteInGameThread(function()
-        if panel then
-            close_panel()
-        else
-            open_panel()
-        end
-    end)
-end)
 
 RegisterKeyBind(Key.ESCAPE, function()
     if panel then
@@ -529,4 +583,4 @@ LoopAsync(TICK_MS, function()
     return false
 end)
 
-log("Loaded, F8 opens the panel")
+log("Loaded, the pause menu opens the panel")
