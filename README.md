@@ -2,7 +2,7 @@
 
 A one-click patch and a small framework for modding Sin Spire, with a set of preset mods. Put each mod in one `Mods` folder, tick the ones you want, and play.
 
-**You need your own copy of Sin Spire.** This repository has no game files.
+**You need your own copy of Sin Spire.** This repository does not include the game. Nurse Touch's pak does include one mesh cut from the game's player model, as `CREDITS.txt` notes.
 
 ## Preset mods
 
@@ -128,4 +128,4 @@ The slider adds a saved row to the game's settings menu. Read `volume.value` to 
 
 ## Credits
 
-Built on [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS). Not affiliated with the developers of Sin Spire.
+Built on [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS). Not affiliated with the developers of Sin Spire. See [CREDITS.txt](CREDITS.txt) for the creators of the sounds and models the preset mods use.

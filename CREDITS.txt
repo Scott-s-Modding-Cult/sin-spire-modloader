@@ -1,0 +1,52 @@
+CREDITS
+
+This project uses work by the people below. Credit here does not mean they made, reviewed or endorsed this project.
+
+If you made something listed here and want it credited differently or removed, please open an issue on this repository.
+
+
+SOUNDS
+
+Shinlalala's Lewd Sound Pack (c) 2024 by Shinlalala
+  Licence: CC BY-SA 4.0, https://creativecommons.org/licenses/by-sa/4.0/
+  Used in: Plant Distractor, Crab Pair (which plays Plant Distractor's copies)
+  Changes: converted to WAV, renamed, and the swallow sounds are its wet sounds played at a lower pitch.
+  These changed sounds are shared under the same licence.
+
+"A couple kissing, snogging sounds" by jonathanslattermusic / Visual Music Ltd
+  Used in: Ghost Kiss
+  Changes: cut into short samples.
+  Licence terms not yet confirmed. Credit is taken from the name of the source file.
+
+
+MODELS, TEXTURES AND ANIMATIONS
+
+Penis plant and mouth plant, from the game DreamLands, by its creators
+  Used in: Plant Distractor
+  Changes: re-rigged and re-animated, with new pairings.
+  Licence terms not yet confirmed.
+
+Headcrab model by Likkez, https://twitter.com/likkezg, http://likkezg.com/
+  Used in: Crab Pair
+  Changes: re-posed and animated, with a darker material on one crab.
+  Licence terms not yet confirmed.
+
+Long thick tongue, from the teeth and tongue mesh pack by BaloonyBoi
+  Used in: Creeper Pair
+  Changes: re-rigged and animated.
+  Licence terms not yet confirmed.
+
+saliva_strings_v2.0.blend, author not yet identified
+  Used in: Creeper Pair, Plant Distractor
+  Changes: strands baked and re-rigged.
+  Licence terms not yet confirmed.
+
+
+GAME AND TOOLS
+
+Sin Spire, by its developers
+  You need your own copy of the game. This project is not affiliated with them.
+  Nurse Touch includes a mesh cut from the game's player model, and many mods play the game's own assets at run time.
+
+UE4SS, by the UE4SS team, https://github.com/UE4SS-RE/RE-UE4SS
+  Licence: MIT. Not stored in this repository, but packed into the patch when it is built.

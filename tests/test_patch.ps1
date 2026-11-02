@@ -36,6 +36,7 @@ Check "no log in payload" (-not (Test-Path "$win64\ue4ss\UE4SS.log"))
 $realFolders = Get-ChildItem "$win64\ue4ss\Mods" -Directory | Where-Object { $_.Attributes -notmatch "ReparsePoint" }
 Check "only UE4SS's own mods are real folders" ($realFolders.Count -eq 9)
 Check "preset installed" (Test-Path "$fake\Mods\AdminPanel\Scripts\main.lua")
+Check "credits installed" (Test-Path "$fake\Mods\CREDITS.txt")
 Check "preset pak linked" (Test-Path "$fake\SinSpire\Content\Paks\~mods\SinSpire-CrabPair_P.pak")
 Check "preset on by default is running" ((Get-Content "$win64\ue4ss\Mods\mods.txt") -contains "AdminPanel : 1")
 Check "preset off by default is listed but off" ((Test-Path "$fake\Mods\CreeperPair\mod.json") -and -not (Test-Path "$win64\ue4ss\Mods\CreeperPair"))

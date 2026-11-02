@@ -73,6 +73,10 @@ if ($LASTEXITCODE -ne 0) { throw "Launcher did not compile" }
 
 [IO.Compression.ZipFile]::CreateFromDirectory("$here\core", "$build\modkit.zip")
 [IO.Compression.ZipFile]::CreateFromDirectory("$here\mods", "$build\presets.zip")
+# The credits travel with the assets they cover, so they land in the player's Mods folder too.
+$presets = [IO.Compression.ZipFile]::Open("$build\presets.zip", "Update")
+[void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($presets, "$here\CREDITS.txt", "CREDITS.txt")
+$presets.Dispose()
 
 # UE4SS with only its own mods, leaving out the log and anything of the player's.
 $ue4ss = "$build\ue4ss_stage"
