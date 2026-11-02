@@ -4,7 +4,7 @@
 param([string]$GameDir = (Split-Path (Split-Path $PSScriptRoot)))
 $ErrorActionPreference = "Stop"
 $target = "$PSScriptRoot\mods"
-$personal = "settings.txt", "monitor.txt", "monitors.txt", "helper.log", "enabled.txt"
+$personal = "settings.txt", "monitor.txt", "monitors.txt", "helper.log", "enabled.txt", "mod-randomizer.json"
 
 foreach ($mod in Get-ChildItem "$GameDir\Mods" -Directory | Where-Object { $_.Name -notlike ".*" -and $_.Name -ne "ModKit" -and $_.Name -ne "Backrooms" }) {
     $to = "$target\$($mod.Name)"

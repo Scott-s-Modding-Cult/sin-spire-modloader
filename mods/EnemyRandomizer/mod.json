@@ -1,0 +1,9 @@
+{
+    "title": "Enemy Randomizer",
+    "description": "Any regular enemy can appear at any spawn point on any floor. Set it up in the admin panel or mod-randomizer.json.",
+    "requires": [
+        "ModKit"
+    ],
+    "version": "1.0.0",
+    "preset": true
+}

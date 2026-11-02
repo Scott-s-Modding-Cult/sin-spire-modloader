@@ -3,6 +3,7 @@
 --   local AdminTabs = require("AdminTabs")
 --   local tab = AdminTabs.AddTab({ id = "MyMod", title = "My Mod" })
 --   tab:AddButton("Do Something", function() end) -- Runs in this mod, on its game-thread tick.
+--   tab:AddChoice("Volume", { "Off", "On" }, 1, function(index) end) -- A settings row. Indexes start at 0.
 --
 -- A mod with its own game-thread tick calls AdminTabs.Poll() from it, and any other mod calls AdminTabs.StartPolling()
 -- once. The tab only shows when the Admin Panel mod is installed. Without it, nothing presses the buttons and all of this
@@ -20,7 +21,11 @@ local POLL_MS = 100
 local LIST_VARIABLE = "AdminTabs_List"
 local TAB_VARIABLE = "AdminTabs_Tab_"
 local PRESS_VARIABLE = "AdminTabs_Press_"
+local CHOICES_VARIABLE = "AdminTabs_Choices_"
+local CHOICE_VARIABLE = "AdminTabs_Choice_"
 local SEPARATOR = "\n"
+local CHOICE_LABEL_SEPARATOR = "\t"
+local OPTION_SEPARATOR = "|"
 
 local tabs = {}
 local polling = false
@@ -45,6 +50,18 @@ local function press_variable(id, index)
     return PRESS_VARIABLE .. id .. "_" .. index
 end
 
+local function choice_variable(id, index)
+    return CHOICE_VARIABLE .. id .. "_" .. index
+end
+
+local function publish_choices(tab)
+    local lines = {}
+    for index, choice in ipairs(tab.choices) do
+        lines[index] = choice.label .. CHOICE_LABEL_SEPARATOR .. table.concat(choice.options, OPTION_SEPARATOR)
+    end
+    ModRef:SetSharedVariable(CHOICES_VARIABLE .. tab.id, table.concat(lines, SEPARATOR))
+end
+
 local function publish(tab)
     local labels = {}
     for index, button in ipairs(tab.buttons) do
@@ -62,9 +79,16 @@ function Tab:AddButton(label, on_press)
     return self
 end
 
+function Tab:AddChoice(label, options, index, on_change)
+    table.insert(self.choices, { label = one_line(label), options = options, value = index, on_change = on_change })
+    ModRef:SetSharedVariable(choice_variable(self.id, #self.choices), index)
+    publish_choices(self)
+    return self
+end
+
 function AdminTabs.AddTab(options)
     local id = one_line(options.id)
-    local tab = setmetatable({ id = id, title = one_line(options.title or id), buttons = {} }, Tab)
+    local tab = setmetatable({ id = id, title = one_line(options.title or id), buttons = {}, choices = {} }, Tab)
     table.insert(tabs, tab)
     publish(tab)
     local known = split(ModRef:GetSharedVariable(LIST_VARIABLE))
@@ -91,6 +115,16 @@ function AdminTabs.Poll()
                 end
             end
         end
+        for index, choice in ipairs(tab.choices) do
+            local value = ModRef:GetSharedVariable(choice_variable(tab.id, index))
+            if value ~= nil and value ~= choice.value then
+                choice.value = value
+                local ok, problem = pcall(choice.on_change, value)
+                if not ok then
+                    log(tab.title .. ", " .. choice.label .. " failed: " .. tostring(problem))
+                end
+            end
+        end
     end
 end
 
@@ -102,17 +136,35 @@ function AdminTabs.StartPolling()
     LoopInGameThreadWithDelay(POLL_MS, AdminTabs.Poll)
 end
 
--- For the admin panel: every mod's tab, in the order the mods loaded, as { id, title, labels }.
+local function read_choices(id)
+    local choices = {}
+    for index, line in ipairs(split(ModRef:GetSharedVariable(CHOICES_VARIABLE .. id))) do
+        local label, joined = line:match("^(.-)" .. CHOICE_LABEL_SEPARATOR .. "(.*)$")
+        local options = {}
+        for option in string.gmatch(joined or "", "[^" .. OPTION_SEPARATOR .. "]+") do
+            table.insert(options, option)
+        end
+        choices[index] = { label = label or line, options = options, value = ModRef:GetSharedVariable(choice_variable(id, index)) or 0 }
+    end
+    return choices
+end
+
+-- For the admin panel: every mod's tab, in the order the mods loaded, as { id, title, labels, choices }.
 function AdminTabs.List()
     local list = {}
     for _, id in ipairs(split(ModRef:GetSharedVariable(LIST_VARIABLE))) do
         local parts = split(ModRef:GetSharedVariable(TAB_VARIABLE .. id))
         local title = table.remove(parts, 1)
         if title then
-            table.insert(list, { id = id, title = title, labels = parts })
+            table.insert(list, { id = id, title = title, labels = parts, choices = read_choices(id) })
         end
     end
     return list
+end
+
+-- For the admin panel: changes a settings row of another mod's tab.
+function AdminTabs.SetChoice(id, index, value)
+    ModRef:SetSharedVariable(choice_variable(id, index), value)
 end
 
 -- For the admin panel: presses a button of another mod's tab.

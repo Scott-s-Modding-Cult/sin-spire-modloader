@@ -21,3 +21,4 @@ ue4ss_files/
 mods/**/settings.txt
 mods/**/monitor.txt
 mods/**/monitors.txt
+mods/**/mod-randomizer.json

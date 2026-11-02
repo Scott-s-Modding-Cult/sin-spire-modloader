@@ -19,6 +19,7 @@ local TICK_MS = 50
 local SETTLE_TICKS = 6 -- A new row can reset itself while it builds, so its choice is reapplied for a moment.
 local ESCAPE_CLOSE_DELAY_MS = 200 -- The game must have seen Esc go down first, or it would open the pause menu.
 local PANEL_WIDTH = 900.0
+local PANEL_MAX_HEIGHT = 860.0 -- A longer page scrolls, so its Back and Close buttons stay on a 1080p screen.
 local MONEY_STEP = 1000
 local ALIVE = 0
 local INPUT_LOCK_NONE = 0
@@ -325,7 +326,7 @@ end
 
 -- All rows and buttons hang off the host, so they are found again through it each tick instead of being kept.
 local function find_rows_box(host)
-    local box = host.WidgetTree.RootWidget:GetChildAt(0):GetChildAt(0):GetChildAt(0)
+    local box = host.WidgetTree.RootWidget:GetChildAt(0):GetChildAt(0):GetChildAt(0):GetChildAt(0)
     if valid(box) then
         return box
     end
@@ -391,19 +392,37 @@ end
 
 local show_page -- Set below, as the pages' buttons need it.
 
--- One page of the panel: the cheats, or with a tab given, that mod's buttons.
+-- A mod's settings rows, in the form the cheat rows use. Each row tells the mod when its choice changes.
+local function page_rows(page)
+    local page_rows = {}
+    for index, choice in ipairs(page.choices or {}) do
+        page_rows[index] = {
+            label = choice.label,
+            options = choice.options,
+            index = choice.value,
+            on_change = function(value)
+                AdminTabs.SetChoice(page.id, index, value)
+            end,
+        }
+    end
+    return page_rows
+end
+
+-- One page of the panel: the cheats, or with a tab given, that mod's rows and buttons.
 local function build_panel(controller, page)
     local host = widget_library():Create(controller, StaticFindObject(BUTTON_CLASS), controller)
     local tree = host.WidgetTree
     local root = new_widget("/Script/UMG.CanvasPanel", tree)
     local background = new_widget("/Script/UMG.Border", tree)
     local size = new_widget("/Script/UMG.SizeBox", tree)
+    local scroll = new_widget("/Script/UMG.ScrollBox", tree)
     local box = new_widget("/Script/UMG.VerticalBox", tree)
     local title = new_widget("/Script/UMG.TextBlock", tree)
 
     background:SetBrushColor({ R = 0.0, G = 0.0, B = 0.0, A = 0.9 })
     background:SetPadding({ Left = 40.0, Top = 30.0, Right = 40.0, Bottom = 30.0 })
     size:SetWidthOverride(PANEL_WIDTH)
+    size:SetMaxDesiredHeight(PANEL_MAX_HEIGHT)
     title:SetText(FText(page and page.title or "Admin Panel"))
     title:SetColorAndOpacity({ SpecifiedColor = { R = 0.75, G = 0.0, B = 0.0, A = 1.0 }, ColorUseRule = 0 })
 
@@ -412,10 +431,21 @@ local function build_panel(controller, page)
     slot:SetAlignment({ X = 0.5, Y = 0.5 })
     slot:SetAutoSize(true)
     background:AddChild(size)
-    size:AddChild(box)
+    size:AddChild(scroll)
+    scroll:AddChild(box)
     box:AddChild(title)
 
-    local result = { address = host:GetAddress(), page = page, row_addresses = {}, button_actions = {}, settle = SETTLE_TICKS }
+    local result = {
+        address = host:GetAddress(),
+        page = page,
+        rows = page and page_rows(page) or rows,
+        row_addresses = {},
+        button_actions = {},
+        settle = SETTLE_TICKS,
+    }
+    for index, row in ipairs(result.rows) do
+        result.row_addresses[index] = add_row(box, controller, row)
+    end
     if page then
         for index, label in ipairs(page.labels) do
             result.button_actions[add_button(box, controller, label)] = function()
@@ -427,9 +457,6 @@ local function build_panel(controller, page)
             show_page(nil)
         end
     else
-        for index, row in ipairs(rows) do
-            result.row_addresses[index] = add_row(box, controller, row)
-        end
         result.button_actions[add_button(box, controller, "Full Heal")] = full_heal
         result.button_actions[add_button(box, controller, "Add " .. MONEY_STEP .. " Money")] = add_money
         result.button_actions[add_button(box, controller, "Kill All Enemies")] = kill_enemies
@@ -553,11 +580,8 @@ local function update_panel()
         close_panel()
         return
     end
-    if panel.page then
-        return -- A mod's page has only buttons, which need no updating.
-    end
     -- The title is the first child, then the rows in order.
-    for index, row in ipairs(rows) do
+    for index, row in ipairs(panel.rows) do
         local widget = box:GetChildAt(index)
         if not valid(widget) or widget:GetAddress() ~= panel.row_addresses[index] then
             log("Row is gone")
@@ -579,6 +603,9 @@ local function update_panel()
             local chosen = spinner:GetCurrentIndex()
             if chosen ~= row.index and row.options[chosen + 1] then
                 row.index = chosen
+                if row.on_change then
+                    row.on_change(chosen)
+                end
                 log(row.label .. ": " .. row.options[chosen + 1])
             end
         end
