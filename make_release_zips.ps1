@@ -1,19 +1,25 @@
-# Zips installed mods from the game's Mods folder into dist\release, one per mod, for attaching to a GitHub Release.
+# Zips installed mods from the game's Mods folder, one per mod, into dist\release for attaching to a GitHub Release.
 # Each zip holds the mod's folder, so it unpacks straight into Mods. Leaves out each player's own files.
+# -InMods zips every mod in mods\ instead and puts the zips there, ready to commit. Run sync_mods.ps1 first.
 param(
     [string[]]$Mods = @("AdminPanel", "Backrooms", "BodyVisible", "MonitorSetting"),
-    [string]$GameDir = (Split-Path (Split-Path $PSScriptRoot))
+    [string]$GameDir = (Split-Path (Split-Path $PSScriptRoot)),
+    [switch]$InMods
 )
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $output = "$PSScriptRoot\dist\release"
-$stage = "$PSScriptRoot\build\release_stage"
-$personal = "settings.txt", "monitor.txt", "monitors.txt", "helper.log", "enabled.txt"
-
-foreach ($path in $output, $stage) {
-    if (Test-Path $path) { Remove-Item $path -Recurse -Force -Confirm:$false }
-    New-Item -ItemType Directory -Force $path | Out-Null
+if ($InMods) {
+    $output = "$PSScriptRoot\mods"
+    $Mods = Get-ChildItem $output -Directory | ForEach-Object { $_.Name }
 }
+$stage = "$PSScriptRoot\build\release_stage"
+$personal = "settings.txt", "monitor.txt", "monitors.txt", "helper.log", "enabled.txt", "mod-randomizer.json"
+
+# Only old zips are cleared, as mods\ also holds the mods themselves.
+if (Test-Path $output) { Get-ChildItem $output -Filter *.zip -File | Remove-Item -Force -Confirm:$false }
+if (Test-Path $stage) { Remove-Item $stage -Recurse -Force -Confirm:$false }
+New-Item -ItemType Directory -Force $output, $stage | Out-Null
 
 foreach ($mod in $Mods) {
     $from = "$GameDir\Mods\$mod"

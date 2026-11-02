@@ -22,6 +22,8 @@ The mods in `mods\` come with the patch and appear in the Mod Manager, where eac
 
 These mods are adult content. `sync_mods.ps1` refreshes `mods\` from a game's `Mods` folder. It leaves out personal settings.
 
+`mods\` also holds a zip of each of these mods, to unpack straight into a game's `Mods` folder. `make_release_zips.ps1 -InMods` remakes them.
+
 ## Building the patch
 
 You need Windows, which already includes the compiler this uses, and a copy of [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS) that works with the game. The loader was tested with v3.0.1 Beta. UE4SS's `dwmapi.dll` and `ue4ss` folder get packed into the patch.

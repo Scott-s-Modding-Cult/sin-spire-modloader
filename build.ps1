@@ -75,6 +75,8 @@ if ($LASTEXITCODE -ne 0) { throw "Launcher did not compile" }
 [IO.Compression.ZipFile]::CreateFromDirectory("$here\mods", "$build\presets.zip")
 # The credits travel with the assets they cover, so they land in the player's Mods folder too.
 $presets = [IO.Compression.ZipFile]::Open("$build\presets.zip", "Update")
+# The mod zips in mods\ are for downloading on their own, and the patch already holds what is in them.
+@($presets.Entries | Where-Object { $_.FullName -like "*.zip" }) | ForEach-Object { $_.Delete() }
 [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($presets, "$here\CREDITS.txt", "CREDITS.txt")
 $presets.Dispose()
 
