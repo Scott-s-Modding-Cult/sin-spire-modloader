@@ -10,6 +10,7 @@
 
 local UEHelpers = require("UEHelpers")
 local ModSettings = require("ModSettings")
+local AdminTabs = require("AdminTabs")
 
 local sex_volume = ModSettings.AddSlider({
     mod = "CrabPair",
@@ -216,9 +217,6 @@ local KINDS = {
 }
 local CLIP_PACKAGE_DIR = "/Game/Mods/CrabPair/"
 local START_WINDOW_SECONDS = 0.1 -- How soon after its start moment a clip may still begin.
--- The admin panel adds one to this for each pair it asks for. Mods cannot call each other, but they can share this.
-local SPAWN_REQUESTS_VARIABLE = "CrabPair_SpawnRequests"
-local PLANT_REQUESTS_VARIABLE = "CrabPair_PlantRequests" -- The same, for the mouth plant and crab.
 local REQUEST_SEARCHES_BEFORE_FALLBACK = 3
 local REQUEST_RETRY_SECONDS = 1.0
 local TICK_MS = 33
@@ -227,9 +225,7 @@ local pairs_list = {} -- { address, clip, sound_position, and a clock and forced
 local level_plan = nil
 local world_address = nil
 local last_sound_number = {}
-local requests_seen = 0
 local requests_waiting = 0
-local plant_requests_seen = 0
 local plant_requests_waiting = 0
 local request_searches = 0
 local next_request_clock = 0.0
@@ -607,21 +603,9 @@ local function taken_spots()
     return spots
 end
 
--- Places one pair the admin panel asked for. The panel pauses the game, so this waits for it to close, and a pair
+-- Places one pair the admin panel's tab asked for. The panel pauses the game, so this waits for it to close, and a pair
 -- never spawns into a paused world.
 local function update_spawn_requests()
-    local total = ModRef:GetSharedVariable(SPAWN_REQUESTS_VARIABLE) or 0
-    if total > requests_seen then
-        requests_waiting = requests_waiting + total - requests_seen
-        requests_seen = total
-        log(string.format("%d requested pairs waiting", requests_waiting))
-    end
-    local plant_total = ModRef:GetSharedVariable(PLANT_REQUESTS_VARIABLE) or 0
-    if plant_total > plant_requests_seen then
-        plant_requests_waiting = plant_requests_waiting + plant_total - plant_requests_seen
-        requests_waiting = requests_waiting + plant_total - plant_requests_seen
-        plant_requests_seen = plant_total
-    end
     if requests_waiting == 0 or os.clock() < next_request_clock then
         return
     end
@@ -791,8 +775,8 @@ local function update_pair(pair, live_pair, player_location)
     end
     local now = os.clock()
     if pair.kind == KINDS.plant then
-        if not try_start(pair, live_pair, PLANT_CLIMAX, now >= pair.climax_clock, position) then
-            try_start(pair, live_pair, PLANT_SLAM, now >= pair.slam_clock, position)
+        if not try_start(pair, live_pair, PLANT_CLIMAX, pair.climax_forced or now >= pair.climax_clock, position) then
+            try_start(pair, live_pair, PLANT_SLAM, pair.slam_forced or now >= pair.slam_clock, position)
         end
         return
     end
@@ -849,6 +833,30 @@ RegisterKeyBind(Key.F9, function()
     end)
 end)
 
+-- Each makes every pair do this at its next chance. A mouth plant and crab has only the slam and climax.
+local function force_all(flag, what)
+    return function()
+        for _, pair in ipairs(pairs_list) do
+            pair[flag] = true
+        end
+        log(what .. " requested")
+    end
+end
+
+-- Shows in the admin panel if it is installed.
+AdminTabs.AddTab({ id = "CrabPair", title = "Crab Pair" })
+    :AddButton("Spawn Random Pair", function()
+        requests_waiting = requests_waiting + 1
+    end)
+    :AddButton("Spawn Mouth Plant And Crab", function()
+        requests_waiting = requests_waiting + 1
+        plant_requests_waiting = plant_requests_waiting + 1
+    end)
+    :AddButton("Make Pairs Slam", force_all("slam_forced", "Slam"))
+    :AddButton("Make Pairs Struggle", force_all("struggle_forced", "Struggle"))
+    :AddButton("Make Pairs Climax", force_all("climax_forced", "Climax"))
+    :AddButton("Make Pairs Chase", force_all("chase_forced", "Chase"))
+
 LoopInGameThreadWithDelay(TICK_MS, function()
     -- A script error here would otherwise stop this loop for the rest of the session.
     local ok, problem = pcall(function()
@@ -861,6 +869,7 @@ LoopInGameThreadWithDelay(TICK_MS, function()
     if not ok then
         log("Tick failed, trying again: " .. tostring(problem))
     end
+    AdminTabs.Poll()
     ModSettings.Poll()
 end)
 

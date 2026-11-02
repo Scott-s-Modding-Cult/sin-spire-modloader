@@ -5,6 +5,9 @@
 -- replaced. Nothing here keeps a game object between ticks: the game can delete any object and reuse its
 -- memory, and calling a deleted object crashes it. See GhostKiss for how that was found.
 
+-- Other mods add pages of their own buttons with ModKit's AdminTabs, so nothing breaks if an older ModKit lacks it.
+local has_tabs, AdminTabs = pcall(require, "AdminTabs")
+
 local SPINNER_CLASS = "/Game/Blueprints/UI/Menu/Settings/BPW_SettingsSpinner.BPW_SettingsSpinner_C"
 local BUTTON_CLASS = "/Game/Blueprints/UI/Menu/BPW_GenericMenuButton.BPW_GenericMenuButton_C"
 local BUTTON_SHORT_CLASS = "BPW_GenericMenuButton_C"
@@ -22,9 +25,6 @@ local INPUT_LOCK_NONE = 0
 local LOOPS_UNTIL_ERROR_IS_REPEATED = 200
 -- PlantDistractor watches this count, and places a pair for each one added once the panel has closed.
 local PLANT_REQUESTS_VARIABLE = "PlantDistractor_SpawnRequests"
--- CrabPair does the same with this one.
-local CRAB_REQUESTS_VARIABLE = "CrabPair_SpawnRequests"
-local CRAB_PLANT_REQUESTS_VARIABLE = "CrabPair_PlantRequests"
 -- The Backrooms mod watches this count, and goes there once the panel has closed.
 local BACKROOMS_REQUESTS_VARIABLE = "Backrooms_EnterRequests"
 -- NurseTouch reads this each time the futa nurse's cum effect fires.
@@ -276,24 +276,12 @@ local function enter_backrooms()
     log("Asked to enter the Backrooms, request " .. requests)
 end
 
-local function spawn_crab_pair()
-    local requests = (ModRef:GetSharedVariable(CRAB_REQUESTS_VARIABLE) or 0) + 1
-    ModRef:SetSharedVariable(CRAB_REQUESTS_VARIABLE, requests)
-    log("Asked for a random crab pair, request " .. requests)
-end
-
 local function send_cum_yaw()
     local degrees = row_value("cum_yaw") * CUM_YAW_STEP
     if degrees ~= cum_yaw_sent then
         ModRef:SetSharedVariable(CUM_YAW_VARIABLE, degrees)
         cum_yaw_sent = degrees
     end
-end
-
-local function spawn_crab_plant()
-    local requests = (ModRef:GetSharedVariable(CRAB_PLANT_REQUESTS_VARIABLE) or 0) + 1
-    ModRef:SetSharedVariable(CRAB_PLANT_REQUESTS_VARIABLE, requests)
-    log("Asked for a mouth plant and crab, request " .. requests)
 end
 
 local function new_widget(class_path, outer)
@@ -397,7 +385,14 @@ local function close_panel()
     log("Closed")
 end
 
-local function build_panel(controller)
+local function mod_tabs()
+    return has_tabs and AdminTabs.List() or {}
+end
+
+local show_page -- Set below, as the pages' buttons need it.
+
+-- One page of the panel: the cheats, or with a tab given, that mod's buttons.
+local function build_panel(controller, page)
     local host = widget_library():Create(controller, StaticFindObject(BUTTON_CLASS), controller)
     local tree = host.WidgetTree
     local root = new_widget("/Script/UMG.CanvasPanel", tree)
@@ -409,7 +404,7 @@ local function build_panel(controller)
     background:SetBrushColor({ R = 0.0, G = 0.0, B = 0.0, A = 0.9 })
     background:SetPadding({ Left = 40.0, Top = 30.0, Right = 40.0, Bottom = 30.0 })
     size:SetWidthOverride(PANEL_WIDTH)
-    title:SetText(FText("Admin Panel"))
+    title:SetText(FText(page and page.title or "Admin Panel"))
     title:SetColorAndOpacity({ SpecifiedColor = { R = 0.75, G = 0.0, B = 0.0, A = 1.0 }, ColorUseRule = 0 })
 
     local slot = root:AddChild(background)
@@ -420,17 +415,32 @@ local function build_panel(controller)
     size:AddChild(box)
     box:AddChild(title)
 
-    local result = { address = host:GetAddress(), row_addresses = {}, button_actions = {}, settle = SETTLE_TICKS }
-    for index, row in ipairs(rows) do
-        result.row_addresses[index] = add_row(box, controller, row)
+    local result = { address = host:GetAddress(), page = page, row_addresses = {}, button_actions = {}, settle = SETTLE_TICKS }
+    if page then
+        for index, label in ipairs(page.labels) do
+            result.button_actions[add_button(box, controller, label)] = function()
+                AdminTabs.Press(page.id, index)
+                log(page.title .. ": " .. label)
+            end
+        end
+        result.button_actions[add_button(box, controller, "Back")] = function()
+            show_page(nil)
+        end
+    else
+        for index, row in ipairs(rows) do
+            result.row_addresses[index] = add_row(box, controller, row)
+        end
+        result.button_actions[add_button(box, controller, "Full Heal")] = full_heal
+        result.button_actions[add_button(box, controller, "Add " .. MONEY_STEP .. " Money")] = add_money
+        result.button_actions[add_button(box, controller, "Kill All Enemies")] = kill_enemies
+        result.button_actions[add_button(box, controller, "Spawn Random Plant Pair")] = spawn_plant_pair
+        result.button_actions[add_button(box, controller, "Enter the Backrooms")] = enter_backrooms
+        for _, tab in ipairs(mod_tabs()) do
+            result.button_actions[add_button(box, controller, tab.title)] = function()
+                show_page(tab)
+            end
+        end
     end
-    result.button_actions[add_button(box, controller, "Full Heal")] = full_heal
-    result.button_actions[add_button(box, controller, "Add " .. MONEY_STEP .. " Money")] = add_money
-    result.button_actions[add_button(box, controller, "Kill All Enemies")] = kill_enemies
-    result.button_actions[add_button(box, controller, "Spawn Random Plant Pair")] = spawn_plant_pair
-    result.button_actions[add_button(box, controller, "Spawn Random Crab Pair")] = spawn_crab_pair
-    result.button_actions[add_button(box, controller, "Spawn Mouth Plant And Crab")] = spawn_crab_plant
-    result.button_actions[add_button(box, controller, "Enter the Backrooms")] = enter_backrooms
     result.button_actions[add_button(box, controller, "Close")] = close_panel
 
     tree.RootWidget = root
@@ -455,6 +465,23 @@ local function open_panel()
     widget_library():SetInputMode_UIOnlyEx(controller, host, INPUT_LOCK_NONE, true)
     controller.bShowMouseCursor = true
     log("Opened")
+end
+
+-- Swaps the panel for another page. Input stays with the panel, so only the widget and its focus change.
+show_page = function(page)
+    local controller = current_controller()
+    if not panel or not controller then
+        return
+    end
+    local old = find_host()
+    local host, built = build_panel(controller, page)
+    host:AddToViewport(50)
+    panel = built
+    if old then
+        old:RemoveFromParent()
+    end
+    widget_library():SetInputMode_UIOnlyEx(controller, host, INPUT_LOCK_NONE, true)
+    log("Showing " .. (page and page.title or "the main page"))
 end
 
 local function toggle_panel()
@@ -525,6 +552,9 @@ local function update_panel()
         log("Panel is gone")
         close_panel()
         return
+    end
+    if panel.page then
+        return -- A mod's page has only buttons, which need no updating.
     end
     -- The title is the first child, then the rows in order.
     for index, row in ipairs(rows) do
