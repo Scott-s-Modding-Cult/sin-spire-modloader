@@ -68,7 +68,7 @@ if ($iconSource) {
     $iconArgument = @("/win32icon:$build\icon.ico")
 }
 
-& $csc /nologo /target:winexe /platform:x64 /optimize+ "/out:$build\launcher.exe" @iconArgument @references "$here\src\Core.cs" "$here\src\Launcher.cs"
+& $csc /nologo /target:winexe /platform:x64 /optimize+ "/out:$build\launcher.exe" @iconArgument @references "$here\src\Core.cs" "$here\src\Importer.cs" "$here\src\Launcher.cs"
 if ($LASTEXITCODE -ne 0) { throw "Launcher did not compile" }
 
 [IO.Compression.ZipFile]::CreateFromDirectory("$here\core", "$build\modkit.zip")

@@ -10,6 +10,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 [assembly: AssemblyProduct("SinSpire Mod Loader")]
@@ -116,6 +117,14 @@ namespace SinSpireModLoader
         readonly CheckedListBox list = new CheckedListBox { Dock = DockStyle.Fill, CheckOnClick = true, IntegralHeight = false };
         readonly TextBox details = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
         readonly TextBox warnings = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
+        readonly ListView repoList = new ListView { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, MultiSelect = false, HideSelection = false };
+        readonly Label repoStatus = new Label { Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(0, 6, 0, 6) };
+        readonly Button install = new Button { Text = "Install", AutoSize = true, Enabled = false };
+        readonly Button recheck = new Button { Text = "Check Again", AutoSize = true };
+        readonly Button play = new Button { Text = "Save and Play", AutoSize = true };
+        readonly Button close = new Button { Text = "Save and Close", AutoSize = true };
+        List<RepoMod> repoMods = new List<RepoMod>();
+        bool repoChecked, busy;
         bool filling;
 
         public bool Play { get; private set; }
@@ -136,8 +145,6 @@ namespace SinSpireModLoader
             var up = new Button { Text = "Move Up", AutoSize = true };
             var down = new Button { Text = "Move Down", AutoSize = true };
             var folder = new Button { Text = "Open Mods Folder", AutoSize = true };
-            var play = new Button { Text = "Save and Play", AutoSize = true };
-            var close = new Button { Text = "Save and Close", AutoSize = true };
             up.Click += (s, e) => MoveSelected(-1);
             down.Click += (s, e) => MoveSelected(1);
             folder.Click += (s, e) => { Directory.CreateDirectory(game.Mods); Process.Start(game.Mods); };
@@ -162,10 +169,166 @@ namespace SinSpireModLoader
             layout.Controls.Add(warnings, 0, 1);
             layout.SetColumnSpan(warnings, 2);
             layout.Controls.Add(left, 0, 2);
-            layout.Controls.Add(right, 1, 2);
-            Controls.Add(layout);
+            layout.SetColumnSpan(left, 2);
+
+            var tabs = new TabControl { Dock = DockStyle.Fill };
+            var modsTab = new TabPage("Mods");
+            modsTab.Controls.Add(layout);
+            var repoTab = new TabPage("Get Mods");
+            repoTab.Controls.Add(BuildRepoPage());
+            tabs.TabPages.AddRange(new[] { modsTab, repoTab });
+            // The list comes from the internet, so it waits until someone asks for this tab.
+            tabs.SelectedIndexChanged += (s, e) => { if (tabs.SelectedTab == repoTab && !repoChecked) { CheckRepo(); } };
+
+            var outer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+            outer.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            outer.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            outer.Controls.Add(tabs, 0, 0);
+            outer.Controls.Add(right, 0, 1);
+            Controls.Add(outer);
+            // A swap of a mod's folders must not be cut short.
+            FormClosing += (s, e) => { if (busy) { e.Cancel = true; } };
 
             Fill(0);
+        }
+
+        Control BuildRepoPage()
+        {
+            repoList.Columns.Add("Mod", 240);
+            repoList.Columns.Add("Installed", 90);
+            repoList.Columns.Add("Download", 90);
+            repoList.Columns.Add("Status", 150);
+            repoList.SelectedIndexChanged += (s, e) => UpdateInstallButton();
+            install.Click += (s, e) => InstallSelected();
+            recheck.Click += (s, e) => CheckRepo();
+
+            var note = new Label
+            {
+                Text = "Installing replaces the mod's folder. Its settings are kept, and the old version is saved in Mods\\.modloader\\backup.",
+                Dock = DockStyle.Fill,
+                AutoSize = true,
+                Padding = new Padding(0, 0, 0, 6),
+            };
+            var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
+            buttons.Controls.AddRange(new Control[] { install, recheck });
+
+            var page = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(8) };
+            page.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            page.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            page.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            page.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            page.Controls.Add(note, 0, 0);
+            page.Controls.Add(repoList, 0, 1);
+            page.Controls.Add(repoStatus, 0, 2);
+            page.Controls.Add(buttons, 0, 3);
+            return page;
+        }
+
+        void SetBusy(bool value, string message)
+        {
+            busy = value;
+            recheck.Enabled = play.Enabled = close.Enabled = !value;
+            repoStatus.Text = message;
+            UpdateInstallButton();
+        }
+
+        async void CheckRepo()
+        {
+            repoChecked = true;
+            SetBusy(true, "Checking for mods...");
+            string message;
+            try
+            {
+                repoMods = await Task.Run(() => Importer.List());
+                message = repoMods.Count + " mods available.";
+            }
+            catch (Exception error)
+            {
+                game.Log("Could not list the mods to download: " + error);
+                message = "Could not check for mods: " + error.Message;
+            }
+            FillRepo();
+            SetBusy(false, message);
+        }
+
+        async void InstallSelected()
+        {
+            if (repoList.SelectedItems.Count == 0) { return; }
+            var mod = (RepoMod)repoList.SelectedItems[0].Tag;
+            SetBusy(true, "Downloading and installing " + mod.Name + "...");
+            string message;
+            try
+            {
+                await Task.Run(() => Importer.Install(game, mod));
+                ReloadMods();
+                message = mod.Name + " is installed. It takes effect the next time the game starts.";
+                game.Log("Installed " + mod.Name + " from the repository, " + mod.Sha);
+            }
+            catch (Exception error)
+            {
+                game.Log("Could not install " + mod.Name + ": " + error);
+                message = "Could not install " + mod.Name + ": " + error.Message;
+            }
+            FillRepo();
+            SetBusy(false, message);
+        }
+
+        // Picks up the new files, keeping the order and the ticks on screen, as those are only saved on Save.
+        void ReloadMods()
+        {
+            List<ModInfo> fresh = Registry.Load(game);
+            var kept = new List<ModInfo>();
+            foreach (ModInfo old in mods)
+            {
+                ModInfo match = fresh.FirstOrDefault(m => m.Name.Equals(old.Name, StringComparison.OrdinalIgnoreCase));
+                if (match != null)
+                {
+                    match.Enabled = old.Enabled;
+                    kept.Add(match);
+                }
+            }
+            kept.AddRange(fresh.Where(m => !kept.Contains(m)));
+            int selected = list.SelectedIndex;
+            mods.Clear();
+            mods.AddRange(kept);
+            Fill(selected);
+        }
+
+        static string RepoStatus(RepoMod mod, bool installed, Dictionary<string, string> recorded)
+        {
+            string sha;
+            if (!installed) { return "Not installed"; }
+            if (!recorded.TryGetValue(mod.Name, out sha)) { return "Installed"; } // Came with the patch, so its age is unknown.
+            return sha == mod.Sha ? "Up to date" : "Update available";
+        }
+
+        void FillRepo()
+        {
+            string selected = repoList.SelectedItems.Count > 0 ? ((RepoMod)repoList.SelectedItems[0].Tag).Name : null;
+            Dictionary<string, string> recorded = Importer.Recorded(game);
+            repoList.Items.Clear();
+            foreach (RepoMod mod in repoMods)
+            {
+                ModInfo local = mods.FirstOrDefault(m => m.Name.Equals(mod.Name, StringComparison.OrdinalIgnoreCase));
+                var item = new ListViewItem(new[]
+                {
+                    local != null ? local.Title : mod.Name,
+                    local != null ? local.Version : "",
+                    mod.Size < 1048576 ? string.Format("{0:0} KB", Math.Ceiling(mod.Size / 1024.0)) : string.Format("{0:0.0} MB", mod.Size / 1048576.0),
+                    RepoStatus(mod, local != null, recorded),
+                }) { Tag = mod };
+                repoList.Items.Add(item);
+                if (mod.Name == selected) { item.Selected = true; }
+            }
+            UpdateInstallButton();
+        }
+
+        void UpdateInstallButton()
+        {
+            install.Enabled = !busy && repoList.SelectedItems.Count > 0;
+            if (repoList.SelectedItems.Count == 0) { return; }
+            string status = repoList.SelectedItems[0].SubItems[3].Text;
+            install.Text = status == "Not installed" ? "Install" : status == "Up to date" ? "Reinstall" : "Update";
         }
 
         void Fill(int selected)

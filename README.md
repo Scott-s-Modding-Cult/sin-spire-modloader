@@ -24,6 +24,8 @@ These mods are adult content. `sync_mods.ps1` refreshes `mods\` from a game's `M
 
 `mods\` also holds a zip of each of these mods, to unpack straight into a game's `Mods` folder. `make_release_zips.ps1 -InMods` remakes them.
 
+The Mod Manager's **Get Mods** tab installs and updates mods from those zips. An update replaces the mod's folder and keeps your settings, and the old version is saved in `Mods\.modloader\backup`. A mod that came with the patch shows as Installed until it is updated once, because its age is not known until then.
+
 ## Building the patch
 
 You need Windows, which already includes the compiler this uses, and a copy of [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS) that works with the game. The loader was tested with v3.0.1 Beta. UE4SS's `dwmapi.dll` and `ue4ss` folder get packed into the patch.
