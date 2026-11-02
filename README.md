@@ -38,8 +38,10 @@ To choose the folders yourself, run the script directly:
 ## Patching the game
 
 1. Close the game.
-2. Run `SinSpire-ModLoader-Patch.exe`. It finds Steam copies by itself, or you can browse to the folder.
-3. Click **Patch Game**.
+2. Run `SinSpire-ModLoader-Patch.exe`. It looks for the game by itself and selects a Steam copy first.
+3. Check the folder it chose, then click **Patch Game**.
+
+The patch asks Steam for its libraries and installed games, then checks a running copy of the game, Windows' list of installed programs, the folders around the patch, and common game folders on each drive. If none of those has the game, it searches the top few levels of your drives for up to 8 seconds. If that also fails, it asks you to choose the folder, and it accepts a choice just above or inside the game's folder.
 
 The patch keeps the game's own exe as `SinSpire-Original.exe` and installs the loader as `SinSpire.exe`. Mods already installed in `ue4ss\Mods` or `Content\Paks\~mods` are moved into `Mods`, and each stays on or off as it was. It is safe to run again.
 

@@ -36,7 +36,10 @@ namespace SinSpireModLoader
         public string InstallInfo { get { return Path.Combine(State, "install.txt"); } }
         public string LogFile { get { return Path.Combine(State, "modloader.log"); } }
 
-        public bool LooksLikeTheGame { get { return File.Exists(Shipping) && Directory.Exists(Paks); } }
+        public bool LooksLikeTheGame
+        {
+            get { return File.Exists(Shipping) && Directory.Exists(Paks) && (File.Exists(Exe) || File.Exists(OriginalExe)); }
+        }
 
         public bool GameIsRunning()
         {

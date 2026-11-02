@@ -98,6 +98,6 @@ Keybinds : 1
 "@ | Set-Content "$ue4ss\ue4ss\Mods\mods.txt" -Encoding ascii
 [IO.Compression.ZipFile]::CreateFromDirectory($ue4ss, "$build\ue4ss.zip")
 
-& $csc /nologo /target:winexe /platform:x64 /optimize+ "/out:$dist\SinSpire-ModLoader-Patch.exe" @iconArgument @references "/resource:$build\launcher.exe,launcher.exe" "/resource:$build\ue4ss.zip,ue4ss.zip" "/resource:$build\modkit.zip,modkit.zip" "/resource:$build\presets.zip,presets.zip" "$here\src\Core.cs" "$here\src\Patcher.cs"
+& $csc /nologo /target:winexe /platform:x64 /optimize+ "/out:$dist\SinSpire-ModLoader-Patch.exe" @iconArgument @references "/resource:$build\launcher.exe,launcher.exe" "/resource:$build\ue4ss.zip,ue4ss.zip" "/resource:$build\modkit.zip,modkit.zip" "/resource:$build\presets.zip,presets.zip" "$here\src\Core.cs" "$here\src\GameSearch.cs" "$here\src\Patcher.cs"
 if ($LASTEXITCODE -ne 0) { throw "Patch did not compile" }
 Get-Item "$dist\SinSpire-ModLoader-Patch.exe" | Select-Object Name, Length

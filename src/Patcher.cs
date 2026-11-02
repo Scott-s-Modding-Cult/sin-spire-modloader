@@ -3,6 +3,8 @@
 //   SinSpire-ModLoader-Patch.exe                     Opens the window.
 //   SinSpire-ModLoader-Patch.exe --patch "<folder>"    Patches without a window. The exit code is 0 on success.
 //   SinSpire-ModLoader-Patch.exe --unpatch "<folder>"  Removes the patch without a window.
+//   SinSpire-ModLoader-Patch.exe --find "<file>" [<choice>...]  Writes what the search finds, for testing.
+//   SinSpire-ModLoader-Patch.exe --no-search         Opens the window as if no game were found, for testing.
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -12,6 +14,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 [assembly: AssemblyProduct("SinSpire Mod Loader Patch")]
@@ -221,39 +224,6 @@ namespace SinSpireModLoader
             }
             say("Patch removed. Your mods are still in the Mods folder but will not load.");
         }
-
-        // The folder this program sits in, then every Steam library that has the game.
-        public static List<string> FindGames()
-        {
-            var found = new List<string>();
-            Action<string> consider = folder =>
-            {
-                if (new GameFolder(folder).LooksLikeTheGame && !found.Contains(folder, StringComparer.OrdinalIgnoreCase)) { found.Add(folder); }
-            };
-            consider(AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\'));
-            try
-            {
-                string steam = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Valve\Steam", "SteamPath", null) as string;
-                if (steam != null)
-                {
-                    steam = steam.Replace('/', '\\');
-                    consider(Path.Combine(steam, @"steamapps\common\Sin Spire"));
-                    string libraries = Path.Combine(steam, @"steamapps\libraryfolders.vdf");
-                    if (File.Exists(libraries))
-                    {
-                        foreach (Match match in Regex.Matches(File.ReadAllText(libraries), "\"path\"\\s+\"([^\"]+)\""))
-                        {
-                            consider(Path.Combine(match.Groups[1].Value.Replace(@"\\", @"\"), @"steamapps\common\Sin Spire"));
-                        }
-                    }
-                }
-            }
-            catch (Exception)
-            {
-                // With no Steam details, the folder can still be chosen by hand.
-            }
-            return found;
-        }
     }
 
     static class PatchProgram
@@ -279,8 +249,16 @@ namespace SinSpireModLoader
                     return 1;
                 }
             }
+            if (args.Length >= 2 && args[0] == "--find")
+            {
+                var lines = GameSearch.Quick().Select(f => "quick|" + f.Source + "|" + f.Folder).ToList();
+                lines.AddRange(GameSearch.Drives().Select(f => "drives|" + f.Source + "|" + f.Folder));
+                foreach (string choice in args.Skip(2)) { lines.Add("choice|" + choice + "|" + GameSearch.ResolveChoice(choice)); }
+                File.WriteAllLines(args[1], lines);
+                return 0;
+            }
             Application.EnableVisualStyles();
-            Application.Run(new PatchForm());
+            Application.Run(new PatchForm(args.Contains("--no-search")));
             return 0;
         }
     }
@@ -289,8 +267,13 @@ namespace SinSpireModLoader
     {
         readonly ComboBox folder = new ComboBox { Dock = DockStyle.Fill };
         readonly TextBox output = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
+        readonly Label status = new Label { AutoSize = true };
+        readonly Button browse = new Button { Text = "Browse...", AutoSize = true };
+        readonly Button patch = new Button { Text = "Patch Game", AutoSize = true };
+        readonly Button remove = new Button { Text = "Remove Patch", AutoSize = true };
+        readonly Dictionary<string, string> sources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        public PatchForm()
+        public PatchForm(bool skipSearch)
         {
             Text = "Sin Spire Mod Loader Patch";
             AutoScaleDimensions = new SizeF(96F, 96F);
@@ -299,16 +282,8 @@ namespace SinSpireModLoader
             MinimumSize = new Size(480, 300);
             StartPosition = FormStartPosition.CenterScreen;
 
-            var browse = new Button { Text = "Browse...", AutoSize = true };
-            var patch = new Button { Text = "Patch Game", AutoSize = true };
-            var remove = new Button { Text = "Remove Patch", AutoSize = true };
-            browse.Click += (s, e) =>
-            {
-                using (var dialog = new FolderBrowserDialog { Description = "Choose the Sin Spire folder, the one with SinSpire.exe in it." })
-                {
-                    if (dialog.ShowDialog(this) == DialogResult.OK) { folder.Text = dialog.SelectedPath; }
-                }
-            };
+            browse.Click += (s, e) => AskForFolder("Choose the Sin Spire folder, the one with SinSpire.exe in it.");
+            folder.SelectedIndexChanged += (s, e) => ShowSource();
             patch.Click += (s, e) => Run(Patch.Apply);
             remove.Click += (s, e) =>
             {
@@ -320,9 +295,10 @@ namespace SinSpireModLoader
 
             var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, FlowDirection = FlowDirection.RightToLeft };
             buttons.Controls.AddRange(new Control[] { patch, remove });
-            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 4, Padding = new Padding(8) };
+            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 5, Padding = new Padding(8) };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
@@ -332,14 +308,76 @@ namespace SinSpireModLoader
             layout.SetColumnSpan(label, 2);
             layout.Controls.Add(folder, 0, 1);
             layout.Controls.Add(browse, 1, 1);
-            layout.Controls.Add(output, 0, 2);
+            layout.Controls.Add(status, 0, 2);
+            layout.SetColumnSpan(status, 2);
+            layout.Controls.Add(output, 0, 3);
             layout.SetColumnSpan(output, 2);
-            layout.Controls.Add(buttons, 0, 3);
+            layout.Controls.Add(buttons, 0, 4);
             layout.SetColumnSpan(buttons, 2);
             Controls.Add(layout);
 
-            foreach (string game in Patch.FindGames()) { folder.Items.Add(game); }
-            if (folder.Items.Count > 0) { folder.SelectedIndex = 0; }
+            Shown += (s, e) => Search(skipSearch);
+        }
+
+        void Search(bool skip)
+        {
+            List<FoundGame> quick = skip ? new List<FoundGame>() : GameSearch.Quick();
+            if (quick.Count > 0 || skip)
+            {
+                Finish(quick);
+                return;
+            }
+
+            // Nothing obvious, so look through the drives without freezing the window.
+            status.Text = "Looking for the game on your drives...";
+            patch.Enabled = remove.Enabled = browse.Enabled = false;
+            Task.Factory.StartNew(() => GameSearch.Drives()).ContinueWith(task =>
+            {
+                patch.Enabled = remove.Enabled = browse.Enabled = true;
+                Finish(task.IsFaulted ? new List<FoundGame>() : task.Result);
+            }, TaskScheduler.FromCurrentSynchronizationContext());
+        }
+
+        void Finish(List<FoundGame> found)
+        {
+            foreach (FoundGame game in found)
+            {
+                sources[game.Folder] = game.Source;
+                folder.Items.Add(game.Folder);
+            }
+            if (found.Count > 0)
+            {
+                folder.SelectedIndex = 0;
+                return;
+            }
+            status.Text = "The game was not found. Choose its folder with Browse.";
+            AskForFolder("Sin Spire was not found on this PC. Choose its folder, the one with SinSpire.exe in it.");
+        }
+
+        void ShowSource()
+        {
+            string source;
+            status.Text = sources.TryGetValue(folder.Text, out source) ? "Found: " + source + "." : "";
+        }
+
+        // Keeps asking until the choice is the game or the person gives up.
+        void AskForFolder(string message)
+        {
+            using (var dialog = new FolderBrowserDialog { Description = message })
+            {
+                while (dialog.ShowDialog(this) == DialogResult.OK)
+                {
+                    string chosen = GameSearch.ResolveChoice(dialog.SelectedPath);
+                    if (chosen != null)
+                    {
+                        sources[chosen] = "Chosen by you";
+                        folder.Text = chosen;
+                        ShowSource();
+                        return;
+                    }
+                    MessageBox.Show(this, "Sin Spire was not found in that folder. Choose the folder with SinSpire.exe in it.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            }
         }
 
         void Run(Action<GameFolder, Action<string>> action)
@@ -348,7 +386,14 @@ namespace SinSpireModLoader
             Action<string> say = line => { output.AppendText(line + Environment.NewLine); output.Update(); };
             try
             {
-                action(new GameFolder(folder.Text), say);
+                string chosen = GameSearch.ResolveChoice(folder.Text);
+                if (chosen == null)
+                {
+                    say("Sin Spire was not found in that folder. Choose the folder with SinSpire.exe in it.");
+                    return;
+                }
+                folder.Text = chosen;
+                action(new GameFolder(chosen), say);
             }
             catch (Exception error)
             {
