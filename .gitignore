@@ -1,5 +1,6 @@
 build/
 dist/
+ue4ss_files/
 
 # Never commit game files or UE4SS binaries.
 *.exe

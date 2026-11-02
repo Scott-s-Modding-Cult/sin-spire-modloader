@@ -25,11 +25,15 @@ These mods are adult content. `sync_mods.ps1` refreshes `mods\` from a game's `M
 
 You need Windows, which already includes the compiler this uses, and a copy of [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS) that works with the game. The loader was tested with v3.0.1 Beta. UE4SS's `dwmapi.dll` and `ue4ss` folder get packed into the patch.
 
+Double-click **`Build Patch.bat`**. It opens the `dist` folder when it finishes, with `SinSpire-ModLoader-Patch.exe` inside.
+
+It looks for UE4SS in a `ue4ss_files` folder beside the script, then in any Steam copy of the game that has it. If it finds none, it asks you to choose the folder. It takes the patch's icon from your copy of the game when it can find one.
+
+To choose the folders yourself, run the script directly:
+
 ```powershell
 .\build.ps1 -GameDir "D:\SteamLibrary\steamapps\common\Sin Spire" -Ue4ssDir "C:\path\to\folder\with\dwmapi.dll"
 ```
-
-The result is `dist\SinSpire-ModLoader-Patch.exe`.
 
 ## Patching the game
 
