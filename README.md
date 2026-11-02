@@ -137,7 +137,7 @@ The loader and its preset mods are free. If you'd like to chip in, you can donat
 
 ## Mod downloads
 
-Some mods are also on the [Releases page](https://github.com/scottricity/sin-spire-modloader/releases) as zips, including ones too big to keep in this repository, such as Backrooms. With the patch installed, unzip one into the game's `Mods` folder and it appears in the Mod Manager. `make_release_zips.ps1` makes the zips.
+Some mods are also on the [Releases page](https://github.com/scottricity/sin-spire-modloader/releases) as zips. Backrooms is too big to keep unzipped in this repository, so it does not come with the patch, but `mods\Backrooms.zip` holds the latest version, and the Mod Manager's Get Mods tab installs it. With the patch installed, unzip one into the game's `Mods` folder and it appears in the Mod Manager. `make_release_zips.ps1` makes the zips.
 
 ## Credits
 

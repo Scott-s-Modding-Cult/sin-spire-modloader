@@ -1,6 +1,7 @@
 # Zips installed mods from the game's Mods folder, one per mod, into dist\release for attaching to a GitHub Release.
 # Each zip holds the mod's folder, so it unpacks straight into Mods. Leaves out each player's own files.
-# -InMods zips every mod in mods\ instead and puts the zips there, ready to commit. Run sync_mods.ps1 first.
+# -InMods puts the zips in mods\ instead, ready to commit. Unless -Mods names some, that is every mod in mods\ and Backrooms,
+# whose folder is too big for this repository but whose zip is not. Run sync_mods.ps1 first.
 param(
     [string[]]$Mods = @("AdminPanel", "Backrooms", "BodyVisible", "MonitorSetting"),
     [string]$GameDir = (Split-Path (Split-Path $PSScriptRoot)),
@@ -11,13 +12,17 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $output = "$PSScriptRoot\dist\release"
 if ($InMods) {
     $output = "$PSScriptRoot\mods"
-    $Mods = Get-ChildItem $output -Directory | ForEach-Object { $_.Name }
+    if (-not $PSBoundParameters.ContainsKey("Mods")) {
+        $Mods = @(Get-ChildItem $output -Directory | ForEach-Object { $_.Name }) + "Backrooms"
+    }
 }
 $stage = "$PSScriptRoot\build\release_stage"
 $personal = "settings.txt", "monitor.txt", "monitors.txt", "helper.log", "enabled.txt", "mod-randomizer.json"
 
-# Only old zips are cleared, as mods\ also holds the mods themselves.
-if (Test-Path $output) { Get-ChildItem $output -Filter *.zip -File | Remove-Item -Force -Confirm:$false }
+# Only the zips being remade are cleared, as mods\ also holds the mods themselves.
+foreach ($mod in $Mods) {
+    if (Test-Path "$output\$mod.zip") { Remove-Item "$output\$mod.zip" -Force -Confirm:$false }
+}
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force -Confirm:$false }
 New-Item -ItemType Directory -Force $output, $stage | Out-Null
 
