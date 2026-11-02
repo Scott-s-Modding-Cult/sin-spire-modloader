@@ -126,6 +126,10 @@ The slider adds a saved row to the game's settings menu. Read `volume.value` to 
 
 `tests\test_patch.ps1` runs the patch and launcher against a fake game folder in your temp directory, with no real game files involved. Build first. Holding Shift while it runs opens the Mod Manager, which the test closes before trying again.
 
+## Donating
+
+The loader and its preset mods are free. If you'd like to chip in, you can donate on the [donation page](https://scottricity.github.io/sin-spire-modloader/). Donations go to the loader's author, not to the developers of Sin Spire or the creators listed in the credits.
+
 ## Mod downloads
 
 Some mods are also on the [Releases page](https://github.com/scottricity/sin-spire-modloader/releases) as zips, including ones too big to keep in this repository, such as Backrooms. With the patch installed, unzip one into the game's `Mods` folder and it appears in the Mod Manager. `make_release_zips.ps1` makes the zips.
