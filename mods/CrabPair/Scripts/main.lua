@@ -3,6 +3,7 @@
 -- Every so often a pair gets excited and slams once, less often the lower crab fights to get away and is held back, and
 -- less often still it climaxes. Rarely it breaks free and runs, is chased down, and is caught, if the pair has room.
 -- Press F9 to make every pair struggle at its next chance.
+-- Rarely a pair is instead a mouth plant sucking off a crab, with a slam and a climax of its own.
 --
 -- The game can delete any object and reuse its memory at any moment, so nothing here keeps a game object between
 -- ticks: pairs are remembered by address and looked up fresh from the game's live list.
@@ -149,10 +150,75 @@ local CHASE = {
 local LAP_RADIUS_CM = 140.0
 local LAP_CLEARANCE_CM = 60.0 -- How far out from the circle a crab's body and claws reach.
 local LAP_ROOM_DIRECTIONS = 8
+local GULP_PITCH = 0.62 -- The pack has no swallow, so a wet sound played low stands in.
+-- The mouth plant's clips and their timing come from the plant pair's, from plant_sound_timing.py.
+local PLANT_LOOP_SOUNDS = {
+    { 0.375, "Stroke", 0.60 }, { 0.792, "Stroke", 0.70 }, { 0.792, "Wet", 0.40 }, { 1.208, "Stroke", 0.50 },
+    { 1.625, "Stroke", 0.70 }, { 1.625, "Wet", 0.40 }, { 2.042, "Stroke", 0.45 }, { 2.458, "Stroke", 0.65 },
+    { 2.458, "Wet", 0.40 }, { 2.875, "Stroke", 0.55 }, { 3.292, "Stroke", 0.60 }, { 3.708, "Stroke", 0.55 },
+    { 4.125, "Stroke", 0.40 }, { 4.583, "Stroke", 0.65 }, { 4.583, "Wet", 0.40 }, { 4.958, "Stroke", 0.45 },
+    { 5.375, "Stroke", 0.50 }, { 5.792, "Stroke", 0.60 }, { 6.208, "Stroke", 0.55 }, { 6.625, "Stroke", 0.65 },
+    { 6.625, "Wet", 0.40 }, { 7.042, "Stroke", 0.45 }, { 7.500, "Stroke", 0.75 }, { 7.500, "Wet", 0.45 },
+    { 7.875, "Stroke", 0.40 }, { 8.292, "Stroke", 0.50 },
+}
+local PLANT_SLAM = {
+    name = "AS_CrabPlant_Slam",
+    package_dir = "/Game/Mods/CrabPair/Plant/",
+    sounds = {
+        { 0.875, "Plap", 1.00 }, { 0.875, "Wet", 0.75 }, { 1.292, "Stroke", 0.50 }, { 1.708, "Stroke", 0.40 },
+    },
+    start_seconds = 4.5,
+    resume_seconds = 6.5,
+    length_seconds = 2.0,
+    min_wait_seconds = 12.0,
+    max_wait_seconds = 30.0,
+}
+local PLANT_CLIMAX = {
+    name = "AS_CrabPlant_Climax",
+    package_dir = "/Game/Mods/CrabPair/Plant/",
+    sounds = {
+        { 0.333, "Plap", 0.50 }, { 0.958, "Plap", 0.65 }, { 1.417, "Plap", 0.80 }, -- The three building strokes.
+        { 2.417, "Plap", 1.00 }, { 2.417, "Wet", 0.70 }, -- The final push.
+        { 2.583, "Cum", 1.00 }, { 3.083, "Cum", 0.90 }, { 3.667, "Cum", 0.80 }, { 4.333, "Cum", 0.65 }, { 5.083, "Cum", 0.50 },
+        { 5.583, "Wet", 0.90, GULP_PITCH }, { 6.833, "Wet", 0.80, GULP_PITCH }, -- The two swallows.
+        { 7.208, "Stroke", 0.45 }, { 7.625, "Stroke", 0.35 },
+    },
+    start_seconds = 0.25,
+    resume_seconds = 8.25,
+    length_seconds = 8.0,
+    min_wait_seconds = 60.0,
+    max_wait_seconds = 120.0,
+}
+local RARE_PLANT_CHANCE = 0.12 -- How often a pair is the mouth plant and crab instead.
+local KINDS = {
+    crabs = {
+        name = "crab pair",
+        mesh_package = MESH_PACKAGE,
+        mesh_name = MESH_NAME,
+        loop_package = ANIM_PACKAGE,
+        loop_name = ANIM_NAME,
+        loop_sounds = LOOP_SOUNDS,
+        root_bone = ROOT_BONE,
+        sound_bone = SOUND_BONE,
+        centre_ahead_cm = 0.0,
+    },
+    plant = {
+        name = "mouth plant and crab",
+        mesh_package = "/Game/Mods/CrabPair/Plant/SK_CrabPlant",
+        mesh_name = "SK_CrabPlant",
+        loop_package = "/Game/Mods/CrabPair/Plant/AS_CrabPlant_Loop",
+        loop_name = "AS_CrabPlant_Loop",
+        loop_sounds = PLANT_LOOP_SOUNDS,
+        root_bone = "PlantPair",
+        sound_bone = "Mth_DEF-Head",
+        centre_ahead_cm = 70.0, -- The plant stands well ahead of the mesh's root, so the root goes behind the spot.
+    },
+}
 local CLIP_PACKAGE_DIR = "/Game/Mods/CrabPair/"
 local START_WINDOW_SECONDS = 0.1 -- How soon after its start moment a clip may still begin.
 -- The admin panel adds one to this for each pair it asks for. Mods cannot call each other, but they can share this.
 local SPAWN_REQUESTS_VARIABLE = "CrabPair_SpawnRequests"
+local PLANT_REQUESTS_VARIABLE = "CrabPair_PlantRequests" -- The same, for the mouth plant and crab.
 local REQUEST_SEARCHES_BEFORE_FALLBACK = 3
 local REQUEST_RETRY_SECONDS = 1.0
 local TICK_MS = 33
@@ -163,6 +229,8 @@ local world_address = nil
 local last_sound_number = {}
 local requests_seen = 0
 local requests_waiting = 0
+local plant_requests_seen = 0
+local plant_requests_waiting = 0
 local request_searches = 0
 local next_request_clock = 0.0
 local requested_spots = {}
@@ -231,18 +299,19 @@ end
 
 -- Turns the pair to the given heading and stands its root on the target, measured from its own bones, so this does not
 -- depend on which way the importer laid out the mesh's axes.
-local function arrange(actor, component, target, heading)
+local function arrange(actor, component, target, heading, kind)
     local hit = {}
-    local root = bone_location(component, ROOT_BONE)
+    local root = bone_location(component, kind.root_bone)
     local front = bone_location(component, FRONT_BONE)
     local current = math.deg(math.atan(front.Y - root.Y, front.X - root.X))
     local yaw = actor:K2_GetActorRotation().Yaw + (heading - current)
     actor:K2_SetActorRotation({ Pitch = 0, Yaw = yaw, Roll = 0 }, true)
-    root = bone_location(component, ROOT_BONE)
+    root = bone_location(component, kind.root_bone)
+    local behind = kind.centre_ahead_cm
     local location = actor:K2_GetActorLocation()
     actor:K2_SetActorLocation({
-        X = location.X + target.X - root.X,
-        Y = location.Y + target.Y - root.Y,
+        X = location.X + target.X - root.X - math.cos(math.rad(heading)) * behind,
+        Y = location.Y + target.Y - root.Y - math.sin(math.rad(heading)) * behind,
         Z = location.Z + target.Z - root.Z,
     }, false, hit, true)
 end
@@ -268,11 +337,15 @@ local function plan_chase(pair)
     pair.chase_clock = os.clock() + random_between(CHASE.min_wait_seconds, CHASE.max_wait_seconds)
 end
 
-local function spawn_pair(target, heading)
-    local mesh = load_by_package(MESH_PACKAGE, MESH_NAME)
-    local anim = load_by_package(ANIM_PACKAGE, ANIM_NAME)
+local function random_kind()
+    return math.random() < RARE_PLANT_CHANCE and KINDS.plant or KINDS.crabs
+end
+
+local function spawn_pair(target, heading, kind)
+    local mesh = load_by_package(kind.mesh_package, kind.mesh_name)
+    local anim = load_by_package(kind.loop_package, kind.loop_name)
     if not mesh or not anim then
-        log("Could not load the crabs: mesh " .. tostring(mesh ~= nil) .. ", animation " .. tostring(anim ~= nil))
+        log("Could not load the " .. kind.name .. ": mesh " .. tostring(mesh ~= nil) .. ", animation " .. tostring(anim ~= nil))
         return nil
     end
     local actor = UEHelpers.GetWorld():SpawnActor(StaticFindObject(ACTOR_CLASS), target, { Pitch = 0, Yaw = 0, Roll = 0 })
@@ -287,11 +360,11 @@ local function spawn_pair(target, heading)
     actor:SetActorEnableCollision(false)
     actor:SetActorScale3D({ X = CRAB_SCALE, Y = CRAB_SCALE, Z = CRAB_SCALE })
     component:PlayAnimation(anim, true)
-    arrange(actor, component, target, heading)
+    arrange(actor, component, target, heading, kind)
     -- Pairs start at different points in the loop, so they never move in step.
     local start = random_between(0.0, LOOP_SECONDS)
     component:SetPosition(start, false)
-    local pair = { address = actor:GetAddress(), clip = nil, sound_position = start }
+    local pair = { address = actor:GetAddress(), kind = kind, clip = nil, sound_position = start }
     plan_slam(pair)
     plan_climax(pair)
     plan_struggle(pair)
@@ -384,6 +457,9 @@ local function has_lap_room(live_pair)
 end
 
 local function record_lap_room(pair)
+    if pair.kind ~= KINDS.crabs then
+        return -- Only the crabs ever run.
+    end
     local live_pair = live_pairs()[pair.address]
     if not live_pair then
         return
@@ -505,11 +581,12 @@ local function update_level_plan()
         spot, heading = place_ahead_of_player(player)
         log("No free spot found, so placing ahead of the player")
     end
-    local placed = spot and spawn_pair(spot, heading)
+    local kind = random_kind()
+    local placed = spot and spawn_pair(spot, heading, kind)
     if placed then
         record_lap_room(placed)
         table.insert(plan.placed, { X = spot.X, Y = spot.Y })
-        log(string.format("Placed pair %d of %d at %s", #plan.placed, plan.want, format_location(spot)))
+        log(string.format("Placed %s %d of %d at %s", kind.name, #plan.placed, plan.want, format_location(spot)))
     end
     if plan.searches >= MAX_SEARCHES and #plan.placed < plan.want then
         log(string.format("Stopped searching with %d of %d pairs placed", #plan.placed, plan.want))
@@ -539,6 +616,12 @@ local function update_spawn_requests()
         requests_seen = total
         log(string.format("%d requested pairs waiting", requests_waiting))
     end
+    local plant_total = ModRef:GetSharedVariable(PLANT_REQUESTS_VARIABLE) or 0
+    if plant_total > plant_requests_seen then
+        plant_requests_waiting = plant_requests_waiting + plant_total - plant_requests_seen
+        requests_waiting = requests_waiting + plant_total - plant_requests_seen
+        plant_requests_seen = plant_total
+    end
     if requests_waiting == 0 or os.clock() < next_request_clock then
         return
     end
@@ -561,11 +644,16 @@ local function update_spawn_requests()
         spot, heading = place_ahead_of_player(player)
         log("No free spot found, so placing ahead of the player")
     end
-    local placed = spawn_pair(spot, heading)
+    local kind = random_kind()
+    if plant_requests_waiting > 0 then
+        kind = KINDS.plant
+        plant_requests_waiting = plant_requests_waiting - 1
+    end
+    local placed = spawn_pair(spot, heading, kind)
     if placed then
         record_lap_room(placed)
         table.insert(requested_spots, { X = spot.X, Y = spot.Y })
-        log(string.format("Placed requested pair at %s", format_location(spot)))
+        log(string.format("Placed requested %s at %s", kind.name, format_location(spot)))
     end
     -- A request that failed even so is dropped, as trying again every tick would only repeat the failure.
     requests_waiting = requests_waiting - 1
@@ -621,7 +709,7 @@ local function play_sound(live_pair, event)
     end
     local pitch = event[4] or random_between(PITCH_LOW, PITCH_HIGH)
     StaticFindObject("/Script/Engine.Default__GameplayStatics"):PlaySoundAtLocation(live_pair.actor, sound,
-        bone_location(live_pair.component, SOUND_BONE), { Pitch = 0, Yaw = 0, Roll = 0 }, volume, pitch, 0.0, nil, nil, nil, nil)
+        bone_location(live_pair.component, live_pair.sound_bone), { Pitch = 0, Yaw = 0, Roll = 0 }, volume, pitch, 0.0, nil, nil, nil, nil)
 end
 
 -- Plays every sound the animation has passed since the last tick. Going by its own position keeps the sounds on the
@@ -636,7 +724,7 @@ end
 
 local function update_sounds(pair, live_pair, position, audible)
     if audible then
-        local sounds = pair.clip and pair.clip.sounds or LOOP_SOUNDS
+        local sounds = pair.clip and pair.clip.sounds or pair.kind.loop_sounds
         if position < pair.sound_position then
             -- The loop came back around.
             play_sounds_between(live_pair, sounds, pair.sound_position, math.huge)
@@ -657,7 +745,7 @@ local function try_start(pair, live_pair, clip, due, position)
         plan_chase(pair)
         return false
     end
-    local animation = load_by_package(CLIP_PACKAGE_DIR .. clip.name, clip.name)
+    local animation = load_by_package((clip.package_dir or CLIP_PACKAGE_DIR) .. clip.name, clip.name)
     if not animation then
         log("Could not load " .. clip.name)
         plan_slam(pair)
@@ -675,20 +763,21 @@ end
 
 local function update_pair(pair, live_pair, player_location)
     local component = live_pair.component
+    live_pair.sound_bone = pair.kind.sound_bone
     local position = component:GetPosition()
     local audible = player_location
         and distance_2d(live_pair.actor:K2_GetActorLocation(), player_location) <= AUDIBLE_DISTANCE_CM
     update_sounds(pair, live_pair, position, audible)
     if pair.clip then
         if position >= pair.clip.length_seconds - 0.04 then
-            local loop = load_by_package(ANIM_PACKAGE, ANIM_NAME)
+            local loop = load_by_package(pair.kind.loop_package, pair.kind.loop_name)
             if loop then
                 component:PlayAnimation(loop, true)
                 component:SetPosition(pair.clip.resume_seconds, false)
                 pair.sound_position = pair.clip.resume_seconds
             end
             -- A slam straight after a climax would break the mood, so the slam waits its full time again.
-            if pair.clip == CLIMAX then
+            if pair.clip == CLIMAX or pair.clip == PLANT_CLIMAX then
                 plan_climax(pair)
             elseif pair.clip == STRUGGLE then
                 plan_struggle(pair)
@@ -701,6 +790,12 @@ local function update_pair(pair, live_pair, player_location)
         return
     end
     local now = os.clock()
+    if pair.kind == KINDS.plant then
+        if not try_start(pair, live_pair, PLANT_CLIMAX, now >= pair.climax_clock, position) then
+            try_start(pair, live_pair, PLANT_SLAM, now >= pair.slam_clock, position)
+        end
+        return
+    end
     if try_start(pair, live_pair, CLIMAX, now >= pair.climax_clock, position) then
         return
     end

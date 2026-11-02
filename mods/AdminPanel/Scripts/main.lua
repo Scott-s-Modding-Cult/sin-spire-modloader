@@ -24,6 +24,7 @@ local LOOPS_UNTIL_ERROR_IS_REPEATED = 200
 local PLANT_REQUESTS_VARIABLE = "PlantDistractor_SpawnRequests"
 -- CrabPair does the same with this one.
 local CRAB_REQUESTS_VARIABLE = "CrabPair_SpawnRequests"
+local CRAB_PLANT_REQUESTS_VARIABLE = "CrabPair_PlantRequests"
 -- The Backrooms mod watches this count, and goes there once the panel has closed.
 local BACKROOMS_REQUESTS_VARIABLE = "Backrooms_EnterRequests"
 -- NurseTouch reads this each time the futa nurse's cum effect fires.
@@ -289,6 +290,12 @@ local function send_cum_yaw()
     end
 end
 
+local function spawn_crab_plant()
+    local requests = (ModRef:GetSharedVariable(CRAB_PLANT_REQUESTS_VARIABLE) or 0) + 1
+    ModRef:SetSharedVariable(CRAB_PLANT_REQUESTS_VARIABLE, requests)
+    log("Asked for a mouth plant and crab, request " .. requests)
+end
+
 local function new_widget(class_path, outer)
     return StaticConstructObject(StaticFindObject(class_path), outer)
 end
@@ -422,6 +429,7 @@ local function build_panel(controller)
     result.button_actions[add_button(box, controller, "Kill All Enemies")] = kill_enemies
     result.button_actions[add_button(box, controller, "Spawn Random Plant Pair")] = spawn_plant_pair
     result.button_actions[add_button(box, controller, "Spawn Random Crab Pair")] = spawn_crab_pair
+    result.button_actions[add_button(box, controller, "Spawn Mouth Plant And Crab")] = spawn_crab_plant
     result.button_actions[add_button(box, controller, "Enter the Backrooms")] = enter_backrooms
     result.button_actions[add_button(box, controller, "Close")] = close_panel
 
