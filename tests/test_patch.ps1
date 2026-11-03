@@ -123,5 +123,30 @@ Check "mods kept" (Test-Path "$fake\Mods\OldOn\Scripts\main.lua")
 Check "paks kept" (Test-Path "$fake\Mods\Loose\Paks\SinSpire-Loose_P.pak")
 Check "player's pak was adopted by the repatch and kept" (Test-Path "$fake\Mods\Mine\Paks\Mine_P.pak")
 
+# --- A UE4SS too old for the mods (like 3.0.1 stable) is updated, and removing the patch puts it back.
+New-Item -ItemType Directory -Force "$win64\ue4ss\Mods\shared\UEHelpers", "$win64\ue4ss\Mods\TheirMod\Scripts" | Out-Null
+Set-Content "$win64\dwmapi.dll" "old proxy"
+Set-Content "$win64\ue4ss\UE4SS.dll" "old dll"
+Set-Content "$win64\ue4ss\UE4SS-settings.ini" "their settings"
+Set-Content "$win64\ue4ss\Mods\shared\UEHelpers\UEHelpers.lua" "-- old helpers"
+Set-Content "$win64\ue4ss\Mods\TheirMod\Scripts\main.lua" "-- theirs"
+Set-Content "$win64\ue4ss\Mods\TheirMod\enabled.txt" ""
+"Exit: " + (Run-Patch "--patch")
+Check "old UE4SS replaced" ((Select-String -Path "$win64\ue4ss\UE4SS.dll" -Pattern "LoopInGameThreadWithDelay" -SimpleMatch -Quiet))
+Check "old proxy replaced" ((Get-Content "$win64\dwmapi.dll" -Raw) -notmatch "old proxy")
+Check "old helpers replaced" ((Get-Content "$win64\ue4ss\Mods\shared\UEHelpers\UEHelpers.lua" -Raw) -notmatch "old helpers")
+Check "their UE4SS settings kept" ((Get-Content "$win64\ue4ss\UE4SS-settings.ini") -eq "their settings")
+Check "old UE4SS backed up" ((Get-Content "$fake\Mods\.modloader\ue4ss_before_patch\ue4ss\UE4SS.dll") -eq "old dll")
+Check "their mod adopted" ((Test-Path "$fake\Mods\TheirMod\Scripts\main.lua") -and ((Get-Content "$win64\ue4ss\Mods\mods.txt") -contains "TheirMod : 1"))
+"Exit: " + (Run-Patch "--patch")
+Check "repatch leaves the updated UE4SS" ((Get-Content "$fake\Mods\.modloader\ue4ss_before_patch\ue4ss\UE4SS.dll") -eq "old dll")
+"Exit: " + (Run-Patch "--unpatch")
+Check "old UE4SS put back" ((Get-Content "$win64\ue4ss\UE4SS.dll") -eq "old dll")
+Check "old proxy put back" ((Get-Content "$win64\dwmapi.dll") -eq "old proxy")
+Check "old helpers put back" ((Get-Content "$win64\ue4ss\Mods\shared\UEHelpers\UEHelpers.lua") -eq "-- old helpers")
+Check "files the update added removed" (-not (Test-Path "$win64\ue4ss\Mods\Keybinds\Scripts\main.lua"))
+Check "their settings still there" ((Get-Content "$win64\ue4ss\UE4SS-settings.ini") -eq "their settings")
+Check "UE4SS backup gone" (-not (Test-Path "$fake\Mods\.modloader\ue4ss_before_patch"))
+
 "--- log"; Get-Content "$fake\Mods\.modloader\modloader.log" | Select-Object -Last 8
 "Failures: $script:failures"

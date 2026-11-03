@@ -13,6 +13,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -87,9 +88,100 @@ namespace SinSpireModLoader
             say("Installed the mod loader as SinSpire.exe.");
         }
 
+        // The mods loop with this, which UE4SS 3.0.1, the last stable release, does not have. Without it they never start.
+        const string Ue4ssNeededFunction = "LoopInGameThreadWithDelay";
+        const string Ue4ssBackupName = "ue4ss_before_patch";
+        const string Ue4ssAddedList = "added_by_patch.txt";
+        // A player's own UE4SS settings and load order stay when their UE4SS is replaced.
+        static readonly HashSet<string> Ue4ssPlayerFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            @"ue4ss\UE4SS-settings.ini", @"ue4ss\Mods\mods.txt",
+        };
+
+        static string Ue4ssBackup(GameFolder game) { return Path.Combine(game.State, Ue4ssBackupName); }
+
+        // Lua function names are stored as plain text in the dll.
+        static bool HasNeededFunction(string dll)
+        {
+            byte[] bytes = File.ReadAllBytes(dll);
+            byte[] name = Encoding.ASCII.GetBytes(Ue4ssNeededFunction);
+            for (int start = 0; start <= bytes.Length - name.Length; start++)
+            {
+                if (bytes[start] != name[0]) { continue; }
+                int matched = 1;
+                while (matched < name.Length && bytes[start + matched] == name[matched]) { matched++; }
+                if (matched == name.Length) { return true; }
+            }
+            return false;
+        }
+
+        // Puts the patch's UE4SS over an older one. What it replaces is kept, and Remove Patch puts it back.
+        static void ReplaceUe4ss(GameFolder game, Action<string> say)
+        {
+            string backup = Ue4ssBackup(game);
+            if (Directory.Exists(backup)) { Directory.Delete(backup, true); }
+            Directory.CreateDirectory(backup);
+            var added = new List<string>();
+            using (var zip = new ZipArchive(Resource("ue4ss.zip"), ZipArchiveMode.Read))
+            {
+                foreach (ZipArchiveEntry entry in zip.Entries)
+                {
+                    if (entry.Name == "") { continue; }
+                    string relative = entry.FullName.Replace('/', '\\');
+                    string path = Path.Combine(game.Win64, relative);
+                    if (File.Exists(path))
+                    {
+                        if (Ue4ssPlayerFiles.Contains(relative)) { continue; }
+                        string kept = Path.Combine(backup, relative);
+                        Directory.CreateDirectory(Path.GetDirectoryName(kept));
+                        File.Copy(path, kept, true);
+                    }
+                    else
+                    {
+                        added.Add(relative);
+                    }
+                    Directory.CreateDirectory(Path.GetDirectoryName(path));
+                    entry.ExtractToFile(path, true);
+                }
+            }
+            File.WriteAllLines(Path.Combine(backup, Ue4ssAddedList), added);
+            say("Updated UE4SS, as the installed one is too old for the mods. The old one is kept in Mods\\.modloader\\"
+                + Ue4ssBackupName + " and comes back if the patch is removed.");
+        }
+
+        static void RestoreUe4ss(GameFolder game, Action<string> say)
+        {
+            string backup = Ue4ssBackup(game);
+            if (!Directory.Exists(backup)) { return; }
+            string list = Path.Combine(backup, Ue4ssAddedList);
+            if (File.Exists(list))
+            {
+                foreach (string relative in File.ReadAllLines(list).Where(l => l.Trim() != ""))
+                {
+                    string path = Path.Combine(game.Win64, relative);
+                    if (File.Exists(path)) { File.Delete(path); }
+                }
+            }
+            foreach (string kept in Directory.GetFiles(backup, "*", SearchOption.AllDirectories))
+            {
+                if (string.Equals(kept, list, StringComparison.OrdinalIgnoreCase)) { continue; }
+                string path = Path.Combine(game.Win64, kept.Substring(backup.Length + 1));
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                File.Copy(kept, path, true);
+            }
+            Directory.Delete(backup, true);
+            say("Put back the UE4SS that was installed before the patch.");
+        }
+
         static bool InstallUe4ss(GameFolder game, Action<string> say)
         {
-            bool present = File.Exists(Path.Combine(game.Win64, "dwmapi.dll")) && File.Exists(Path.Combine(game.Ue4ss, "UE4SS.dll"));
+            string dll = Path.Combine(game.Ue4ss, "UE4SS.dll");
+            if (File.Exists(dll) && !HasNeededFunction(dll))
+            {
+                ReplaceUe4ss(game, say);
+                return false;
+            }
+            bool present = File.Exists(Path.Combine(game.Win64, "dwmapi.dll")) && File.Exists(dll);
             if (present)
             {
                 say("UE4SS is already installed, so it was left as it is.");
@@ -222,6 +314,7 @@ namespace SinSpireModLoader
                 File.Delete(game.InstallInfo);
                 say("Removed UE4SS.");
             }
+            RestoreUe4ss(game, say);
             say("Patch removed. Your mods are still in the Mods folder but will not load.");
         }
     }
