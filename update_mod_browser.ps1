@@ -96,7 +96,8 @@ $text = "{`n" +
     '  "_note": "Run update_mod_browser.ps1 to refresh stamp, version, zip, bytes, sha, keys, requires, loadAfter, preset, defaultOff and alwaysOn. Edit icon, category, summary and details by hand, then copy stamp to checked. category is one of Scenes, Gameplay, Maps, Visual, Tools.",' + "`n" +
     "  `"mods`": [`n" + ($lines -join ",`n") + "`n  ]`n}`n"
 
-$current = if (Test-Path $dataPath) { [IO.File]::ReadAllText($dataPath, $utf8) } else { "" }
+# Line endings are ignored, as git may check the file out with CRLF.
+$current = if (Test-Path $dataPath) { [IO.File]::ReadAllText($dataPath, $utf8).Replace("`r`n", "`n") } else { "" }
 if ($Check) {
     $notes | ForEach-Object { Write-Warning $_ }
     if ($current -ne $text) { Write-Warning "docs\mods\mods.json is out of date; run update_mod_browser.ps1."; exit 1 }
