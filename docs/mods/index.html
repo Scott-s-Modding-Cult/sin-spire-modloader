@@ -54,20 +54,45 @@
     outline-offset: 2px;
   }
 
-  nav {
+  /* Top bar, the same on the support page. */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    border-bottom: 1px solid var(--line);
+    background: rgba(12, 6, 32, 0.85);
+    backdrop-filter: blur(8px);
+  }
+  .topbar nav {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 6px 18px;
+    gap: 8px 18px;
     max-width: 1120px;
     margin: 0 auto;
-    padding: 18px 16px;
+    padding: 12px 16px;
   }
-  nav .brand { font-weight: 700; text-decoration: none; margin-right: auto; }
-  nav a:not(.brand) { color: var(--muted); text-decoration: none; }
-  nav a:not(.brand):hover, nav a[aria-current] { color: var(--text); }
+  .topbar .brand { font-weight: 700; text-decoration: none; margin-right: auto; }
+  .topbar a:not(.brand):not(.cta) { color: var(--muted); text-decoration: none; }
+  .topbar a:not(.brand):not(.cta):hover, .topbar a[aria-current]:not(.cta) { color: var(--text); }
+  .topbar .cta {
+    padding: 7px 16px;
+    border-radius: 8px;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .topbar .cta:hover { background: var(--accent-hover); }
+  /* On phones the button stays beside the name and the bar scrolls away. */
+  @media (max-width: 600px) {
+    .topbar { position: static; }
+    .topbar .brand { order: -2; }
+    .topbar .cta { order: -1; }
+  }
 
-  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px 48px; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 16px 16px 48px; }
   header h1 { margin: 12px 0 6px; font-size: 34px; line-height: 1.2; }
   header p { margin: 0 0 20px; color: var(--muted); max-width: 640px; }
 
@@ -237,13 +262,15 @@
   </div>
 </div>
 
-<nav>
-  <a class="brand" href="../">Sin Spire Mod Loader</a>
-  <a href="./" aria-current="page">Mods</a>
-  <a href="https://github.com/scottricity/sin-spire-modloader/releases">Download patch</a>
-  <a href="../">Support</a>
-  <a href="https://github.com/scottricity/sin-spire-modloader">GitHub</a>
-</nav>
+<header class="topbar">
+  <nav>
+    <a class="brand" href="../">Sin Spire Mod Loader</a>
+    <a href="https://github.com/scottricity/sin-spire-modloader/releases">Download patch</a>
+    <a href="../">Support</a>
+    <a href="https://github.com/scottricity/sin-spire-modloader">GitHub</a>
+    <a class="cta" href="./" aria-current="page">Browse mods</a>
+  </nav>
+</header>
 
 <div class="wrap">
   <header>
