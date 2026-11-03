@@ -26,6 +26,7 @@ local CROUCHED_HEIGHT_SHARE = 0.75 -- Of the standing capsule. The game's crouch
 local MAX_TURN_DEG = 70.0 -- The legs turn toward a sideways step, and past this the body would look twisted.
 local BACKWARD_DEG = 100.0
 local TURN_SHARE_PER_TICK = 0.25
+local HOLD_VARIABLE = "BodyVisible_Hold" -- Set by a mod whose scene plays its own clip on the body.
 
 local state = nil -- { address, showing, rest, standing, clip, montage, turn }
 local error_cooldown = 0
@@ -208,6 +209,14 @@ local function tick()
         set_turn(mesh, 0.0)
         set_bones_hidden(mesh, true)
         state.showing = true
+    end
+
+    -- Another mod's scene is playing on the body (GhostKiss), so it stays showing, faces ahead and plays nothing.
+    if ModRef:GetSharedVariable(HOLD_VARIABLE) then
+        state.turn = 0.0
+        set_turn(mesh, 0.0)
+        state.clip, state.montage = nil, nil
+        return
     end
 
     -- The game hides the mesh again at the end of every interaction.

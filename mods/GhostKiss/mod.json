@@ -1,6 +1,9 @@
 {
     "title": "Ghost Kiss",
-    "description": "LostSoul kiss.",
-    "version": "1.0.0",
+    "description": "LostSoul kiss. Near a kissing pair, Interact grabs both heads; Shift+Interact takes one by the neck.",
+    "requires": [
+        "ModKit"
+    ],
+    "version": "1.2.0",
     "preset": true
 }
