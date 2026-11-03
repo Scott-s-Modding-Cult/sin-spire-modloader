@@ -33,6 +33,7 @@ namespace SinSpireModLoader
         {
             "BPML_GenericFunctions", "BPModLoaderMod", "CheatManagerEnablerMod", "ConsoleCommandsMod",
             "ConsoleEnablerMod", "Keybinds", "LineTraceMod", "SplitScreenMod", "shared",
+            "ActorDumperMod", "jsbLuaProfilerMod", // Only in UE4SS 3.0.1 and older.
         };
 
         static Stream Resource(string name)
@@ -115,12 +116,50 @@ namespace SinSpireModLoader
             return false;
         }
 
+        // UE4SS 3.0.1 and older keep everything straight in Win64, and its proxy dll loads that copy, not the one in the
+        // ue4ss folder. Its mods move to where the patch adopts mods from, keeping whether each was on, and the rest goes
+        // into the backup.
+        static void MoveFlatUe4ss(GameFolder game, string backup)
+        {
+            string flatMods = Path.Combine(game.Win64, "Mods");
+            if (Directory.Exists(flatMods))
+            {
+                var on = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                string list = Path.Combine(flatMods, "mods.txt");
+                if (File.Exists(list))
+                {
+                    foreach (string line in File.ReadAllLines(list))
+                    {
+                        Match entry = Regex.Match(line.Trim('﻿', ' ', '\t'), @"^([^;:]+?)\s*:\s*1$");
+                        if (entry.Success) { on.Add(entry.Groups[1].Value); }
+                    }
+                }
+                Directory.CreateDirectory(game.Ue4ssMods);
+                foreach (string dir in Directory.GetDirectories(flatMods))
+                {
+                    string name = Path.GetFileName(dir);
+                    string target = Path.Combine(game.Ue4ssMods, name);
+                    if (Ue4ssOwnMods.Contains(name) || Directory.Exists(target)) { continue; }
+                    Directory.Move(dir, target);
+                    if (on.Contains(name)) { File.WriteAllText(Path.Combine(target, "enabled.txt"), ""); }
+                }
+            }
+            foreach (string name in new[] { "UE4SS.dll", "UE4SS-settings.ini", "UE4SS_Signatures", "Mods" })
+            {
+                string path = Path.Combine(game.Win64, name);
+                string kept = Path.Combine(backup, name);
+                if (File.Exists(path)) { File.Move(path, kept); }
+                else if (Directory.Exists(path)) { Directory.Move(path, kept); }
+            }
+        }
+
         // Puts the patch's UE4SS over an older one. What it replaces is kept, and Remove Patch puts it back.
-        static void ReplaceUe4ss(GameFolder game, Action<string> say)
+        static void ReplaceUe4ss(GameFolder game, bool flat, Action<string> say)
         {
             string backup = Ue4ssBackup(game);
             if (Directory.Exists(backup)) { Directory.Delete(backup, true); }
             Directory.CreateDirectory(backup);
+            if (flat) { MoveFlatUe4ss(game, backup); }
             var added = new List<string>();
             using (var zip = new ZipArchive(Resource("ue4ss.zip"), ZipArchiveMode.Read))
             {
@@ -129,14 +168,19 @@ namespace SinSpireModLoader
                     if (entry.Name == "") { continue; }
                     string relative = entry.FullName.Replace('/', '\\');
                     string path = Path.Combine(game.Win64, relative);
+                    // Beside a flat UE4SS, the ue4ss folder is not part of the old install, as an earlier patch put it there.
+                    bool oldFile = !flat || !relative.StartsWith(@"ue4ss\", StringComparison.OrdinalIgnoreCase);
                     if (File.Exists(path))
                     {
                         if (Ue4ssPlayerFiles.Contains(relative)) { continue; }
-                        string kept = Path.Combine(backup, relative);
-                        Directory.CreateDirectory(Path.GetDirectoryName(kept));
-                        File.Copy(path, kept, true);
+                        if (oldFile)
+                        {
+                            string kept = Path.Combine(backup, relative);
+                            Directory.CreateDirectory(Path.GetDirectoryName(kept));
+                            File.Copy(path, kept, true);
+                        }
                     }
-                    else
+                    else if (oldFile)
                     {
                         added.Add(relative);
                     }
@@ -176,10 +220,12 @@ namespace SinSpireModLoader
         static bool InstallUe4ss(GameFolder game, Action<string> say)
         {
             string dll = Path.Combine(game.Ue4ss, "UE4SS.dll");
-            if (File.Exists(dll) && !HasNeededFunction(dll))
+            bool flat = File.Exists(Path.Combine(game.Win64, "UE4SS.dll"));
+            if (flat || (File.Exists(dll) && !HasNeededFunction(dll)))
             {
-                ReplaceUe4ss(game, say);
-                return false;
+                ReplaceUe4ss(game, flat, say);
+                // The ue4ss folder is the patch's own next to a flat UE4SS, so Remove Patch takes it away.
+                return flat;
             }
             bool present = File.Exists(Path.Combine(game.Win64, "dwmapi.dll")) && File.Exists(dll);
             if (present)

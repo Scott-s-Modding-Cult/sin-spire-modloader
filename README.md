@@ -50,7 +50,7 @@ The patch asks Steam for its libraries and installed games, then checks a runnin
 
 The patch keeps the game's own exe as `SinSpire-Original.exe` and installs the loader as `SinSpire.exe`. Mods already installed in `ue4ss\Mods` or `Content\Paks\~mods` are moved into `Mods`, and each stays on or off as it was. It is safe to run again.
 
-A UE4SS that is already installed is kept, unless it is too old for the mods, as UE4SS 3.0.1 is. The patch then puts its own UE4SS over it, keeping your `UE4SS-settings.ini` and saving the old files in `Mods\.modloader\ue4ss_before_patch`.
+A UE4SS that is already installed is kept, unless it is too old for the mods, as UE4SS 3.0.1 is. The patch then puts its own UE4SS in its place and saves the old files in `Mods\.modloader\ue4ss_before_patch`. UE4SS 3.0.1 keeps its files straight in `Win64` rather than in a `ue4ss` folder; its Lua mods move into `Mods`, each staying on or off as it was.
 
 **Remove Patch** puts the original exe back and takes away the links. If the patch installed UE4SS, it removes that too, and if it updated an older UE4SS, it puts the old one back. The `Mods` folder is kept.
 

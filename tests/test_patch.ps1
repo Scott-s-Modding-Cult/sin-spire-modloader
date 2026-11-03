@@ -148,5 +148,30 @@ Check "files the update added removed" (-not (Test-Path "$win64\ue4ss\Mods\Keybi
 Check "their settings still there" ((Get-Content "$win64\ue4ss\UE4SS-settings.ini") -eq "their settings")
 Check "UE4SS backup gone" (-not (Test-Path "$fake\Mods\.modloader\ue4ss_before_patch"))
 
+# --- UE4SS 3.0.1 stable keeps its files straight in Win64. Its proxy would load that copy, so it is moved aside.
+cmd /c rmdir /s /q "`"$win64\ue4ss`""
+New-Item -ItemType Directory -Force "$win64\Mods\FlatOn\Scripts", "$win64\Mods\FlatOff\Scripts", "$win64\Mods\Keybinds\Scripts" | Out-Null
+Set-Content "$win64\dwmapi.dll" "flat proxy"
+Set-Content "$win64\UE4SS.dll" "flat dll"
+Set-Content "$win64\UE4SS-settings.ini" "flat settings"
+Set-Content "$win64\Mods\mods.txt" "FlatOn : 1", "FlatOff : 0", "", "; Built-in keybinds, do not move up!", "Keybinds : 1"
+Set-Content "$win64\Mods\FlatOn\Scripts\main.lua" "-- on"
+Set-Content "$win64\Mods\FlatOff\Scripts\main.lua" "-- off"
+Set-Content "$win64\Mods\Keybinds\Scripts\main.lua" "-- flat keybinds"
+"Exit: " + (Run-Patch "--patch")
+Check "flat UE4SS moved aside" (-not (Test-Path "$win64\UE4SS.dll") -and -not (Test-Path "$win64\Mods"))
+Check "patch's UE4SS installed" ((Select-String -Path "$win64\ue4ss\UE4SS.dll" -Pattern "LoopInGameThreadWithDelay" -SimpleMatch -Quiet))
+Check "flat proxy replaced" ((Get-Content "$win64\dwmapi.dll" -Raw) -notmatch "flat proxy")
+Check "flat mod that was on adopted and on" ((Test-Path "$fake\Mods\FlatOn\Scripts\main.lua") -and ((Get-Content "$win64\ue4ss\Mods\mods.txt") -contains "FlatOn : 1"))
+Check "flat mod that was off adopted and off" ((Test-Path "$fake\Mods\FlatOff\Scripts\main.lua") -and ((Get-Content "$fake\Mods\modlist.txt") -contains "-FlatOff"))
+Check "flat UE4SS backed up" ((Get-Content "$fake\Mods\.modloader\ue4ss_before_patch\UE4SS.dll") -eq "flat dll")
+"Exit: " + (Run-Patch "--unpatch")
+Check "flat UE4SS put back" ((Get-Content "$win64\UE4SS.dll") -eq "flat dll")
+Check "flat proxy put back" ((Get-Content "$win64\dwmapi.dll") -eq "flat proxy")
+Check "flat settings put back" ((Get-Content "$win64\UE4SS-settings.ini") -eq "flat settings")
+Check "flat built-in mods put back" ((Get-Content "$win64\Mods\Keybinds\Scripts\main.lua") -eq "-- flat keybinds")
+Check "patch's ue4ss folder removed" (-not (Test-Path "$win64\ue4ss"))
+Check "flat backup gone" (-not (Test-Path "$fake\Mods\.modloader\ue4ss_before_patch"))
+
 "--- log"; Get-Content "$fake\Mods\.modloader\modloader.log" | Select-Object -Last 8
 "Failures: $script:failures"
