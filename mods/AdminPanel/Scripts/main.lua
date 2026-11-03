@@ -69,6 +69,38 @@ local function log(message)
     print("[AdminPanel] " .. message .. "\n")
 end
 
+-- UE4SS 3.0.1, the last stable release, has neither game thread timer. Players who installed it before the patch keep
+-- it, so there a background timer hands each step to the game thread. That older way was linked to crashes, so the
+-- game thread timers are used whenever they exist.
+local function loop_in_game_thread(delay_ms, callback)
+    if LoopInGameThreadWithDelay then
+        LoopInGameThreadWithDelay(delay_ms, callback)
+        return
+    end
+    log("This UE4SS has no LoopInGameThreadWithDelay, so an older loop is used. A newer UE4SS is more stable.")
+    local waiting = false -- A slow frame must not pile up steps.
+    LoopAsync(delay_ms, function()
+        if not waiting then
+            waiting = true
+            ExecuteInGameThread(function()
+                waiting = false
+                callback()
+            end)
+        end
+        return false
+    end)
+end
+
+local function in_game_thread_after(delay_ms, callback)
+    if ExecuteInGameThreadWithDelay then
+        ExecuteInGameThreadWithDelay(delay_ms, callback)
+    else
+        ExecuteWithDelay(delay_ms, function()
+            ExecuteInGameThread(callback)
+        end)
+    end
+end
+
 local function valid(object)
     return object ~= nil and object:IsValid()
 end
@@ -624,11 +656,11 @@ end
 
 RegisterKeyBind(Key.ESCAPE, function()
     if panel then
-        ExecuteInGameThreadWithDelay(ESCAPE_CLOSE_DELAY_MS, close_panel)
+        in_game_thread_after(ESCAPE_CLOSE_DELAY_MS, close_panel)
     end
 end)
 
-LoopInGameThreadWithDelay(TICK_MS, function()
+loop_in_game_thread(TICK_MS, function()
     local ok, message = pcall(tick)
     if ok then
         return

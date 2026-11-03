@@ -5,7 +5,7 @@
         "NurseTouch"
     ],
     "title": "Admin Panel",
-    "description": "Cheat panel. F8 opens it, Esc closes it.",
+    "description": "Cheat panel. The Admin Panel button in the pause menu opens it, Esc closes it.",
     "keys": [
         "Esc"
     ],
