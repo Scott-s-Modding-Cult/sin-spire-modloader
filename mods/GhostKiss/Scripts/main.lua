@@ -1,9 +1,11 @@
 -- LostSoul ghosts sometimes spawn as a kissing pair, and only notice the player at very close range.
 --
--- Pressing Interact (E) near a kissing pair grabs both heads, one in each hand, for a double blowjob scene that ends
--- in a climax and purifies both. Shift+E instead takes the nearer head by its neck and thrusts up through it
--- and out of its mouth, while the other waits, and purifies both too. Pressing E again lets go early, and they go back to
--- kissing.
+-- A kissing pair shows the game's own sex prompt. Holding Interact (E) fills its bar like any of the game's prompts, and
+-- then, with enough lust, grabs both heads for a double blowjob scene that ends in a climax and purifies both. Pressing E
+-- during that scene lets go early.
+--
+-- A single Lost Soul gets a Neck scene in the game's own scene lists, beside its blowjob: one head taken by its neck and
+-- thrust through, out of its mouth. The game runs it like its own scenes, with stages, the climax bar and the end.
 --
 -- The game can delete any object and reuse its memory at any moment, and calling a function on a deleted
 -- object crashes it. So nothing here keeps a game object between ticks: ghosts are remembered by address and
@@ -36,6 +38,14 @@ local WAKE_PUSH_CM = 35.0 -- Waking ghosts move apart, because their capsules ov
 local WAKE_TARGET_DELAY_MS = 400 -- The AI restarts first, or it would reset the target it was just given.
 local COMBAT_STATE_ATTACKING = 4
 local ADMIN_SPAWN_DISTANCE_CM = 250.0
+local SEX_ICON = 7 -- The interact prompt's icon type for the game's sex symbol, as BPW_Interact picks it.
+local VISIBILITY_CHANNEL = 3 -- ECC_Visibility, which the game's interact trace uses.
+local IGNORE, BLOCK = 0, 2
+local PERK_LIBRARY = "/Game/Blueprints/Player/BPL_Stats.Default__BPL_Stats_C"
+local COMMON_LIBRARY = "/Game/Blueprints/BPFL_CommonFunctions.Default__BPFL_CommonFunctions_C"
+local HOLD_TAKEOVER_SECONDS = 0.12 -- The mod ends the game's hold timer this long before it would finish, and acts itself.
+local LUST_MESSAGE = "Lust is too low!" -- The game's own words and colour when a scene needs more lust.
+local LUST_COLOUR = { R = 1.0, G = 0.222369, B = 0.72808, A = 1.0 }
 
 -- The scenes. Each clip set is authored with its timing table, by make_ghost_bj_keys.py and make_ghost_neck_keys.py.
 local SCENE_DIR = "/Game/Mods/GhostKiss/"
@@ -68,8 +78,10 @@ local LONGEST_SLURP_SECONDS = 3.0 -- A slurp is not restarted over itself; a loo
 local CUM_PACKAGE = "/Game/Blueprints/Effects/NS_Cum"
 local CUM_NAME = "NS_Cum"
 local CUM_BONE = "penis_06"
-local CUM_YAW = 285.0 -- The angle the user chose for the same shaft in NurseTouch.
-local CUM_YAW_VARIABLE = "NurseTouch_CumYaw"
+-- The effect shoots along its attach point's +X. On the player's penis_06 the shaft runs along the bone's -Y (read in
+-- game), so a yaw of 270 sends it straight out of the tip. At 0 it went straight to the player's left; at NurseTouch's
+-- 285 it leant 15 degrees left, which in the neck scene, where the tip points at the camera, showed as a sideways streak.
+local CUM_YAW = 270.0
 local KEEP_RELATIVE_OFFSET = 0
 local NO_POOLING = 0
 local ANIMATION_BLUEPRINT = 0
@@ -79,7 +91,6 @@ local MOVEMENT_WALKING = 1
 local active_pairs = {}
 local scene = nil -- The running scene, if any.
 local purifying = {} -- Pairs whose end of scene sequence ran, waiting to see whether the game dissolves them.
-local grab_requested = false
 local let_go_requested = false
 local admin_spawns = 0
 local clock = 0.0
@@ -157,6 +168,14 @@ end
 -- Stops the ghost's AI and its senses, so only the checks in watch_pairs can wake it.
 local function hold_still(ghost)
     local saved = { mode = ghost.CharacterMovement.MovementMode, health = ghost.BPC_HealthComponent.CurrentHealth }
+    pcall(function()
+        local interact = ghost.BP_InteractableObject
+        saved.interact = { can = interact.CanInteract, hold = interact.HoldDownToInteract, kind = interact.InteractType,
+            alternate = interact.HasAlternateInteractionsOnHold }
+    end)
+    pcall(function()
+        saved.profile = ghost.CapsuleComponent:GetCollisionProfileName()
+    end)
     if not ghost.Controller:IsValid() then
         ghost:SpawnDefaultController()
     end
@@ -174,10 +193,54 @@ local function hold_still(ghost)
     return saved
 end
 
+-- The game's interact prompt, which it shows with the sex symbol over a knocked down enemy. A kissing ghost shows it
+-- too, held like the game's own; check_holds takes over just before the hold would finish.
+local function set_prompt(ghost, saved, on)
+    if not ghost or not saved or not saved.interact then
+        return
+    end
+    pcall(function()
+        local interact = ghost.BP_InteractableObject
+        if on then
+            interact.CanInteract = true
+            interact.HoldDownToInteract = true
+            interact.InteractType = SEX_ICON
+            -- Off, so the mod can end the hold with CancelHeldInteraction without it also acting as a tap.
+            interact.HasAlternateInteractionsOnHold = false
+        else
+            interact:CancelHeldInteraction()
+            interact.CanInteract = saved.interact.can
+            interact.HoldDownToInteract = saved.interact.hold
+            interact.InteractType = saved.interact.kind
+            interact.HasAlternateInteractionsOnHold = saved.interact.alternate
+        end
+    end)
+end
+
+-- A kissing ghost blocks only the game's visibility traces, so the interact trace finds it and shots hit it, while the
+-- pair's overlapping capsules and the player pass through each other. Off, it gets its own collision back.
+local function set_trace_only(ghost, saved, on)
+    if not ghost or not saved then
+        return
+    end
+    pcall(function()
+        local capsule = ghost.CapsuleComponent
+        if on then
+            capsule:SetCollisionResponseToAllChannels(IGNORE)
+            capsule:SetCollisionResponseToChannel(VISIBILITY_CHANNEL, BLOCK)
+            ghost:SetActorEnableCollision(true)
+        elseif saved.profile then
+            capsule:SetCollisionProfileName(saved.profile, true)
+        end
+    end)
+end
+
 local function release(ghost, saved)
     if not ghost then
         return
     end
+    set_prompt(ghost, saved, false)
+    set_trace_only(ghost, saved, false)
     ghost.Mesh:SetAnimationMode(0, true)
     ghost:SetActorEnableCollision(true)
     -- A ghost spawned this frame has not started moving yet, so it has no mode to go back to.
@@ -417,7 +480,16 @@ local function watch_pairs(live)
             wake_pair(pair, live, "a ghost is gone")
         elseif was_hurt(a, pair.saved_a) or was_hurt(b, pair.saved_b) then
             wake_pair(pair, live, "a ghost was hurt")
-        elseif player and clock >= pair.calm_until then
+        else
+            set_prompt(a, pair.saved_a, true)
+            set_prompt(b, pair.saved_b, true)
+            if not pair.traceable then
+                set_trace_only(a, pair.saved_a, true)
+                set_trace_only(b, pair.saved_b, true)
+                pair.traceable = true
+            end
+        end
+        if a and b and active_pairs[index] == pair and player and clock >= pair.calm_until then
             local location = player:K2_GetActorLocation()
             if distance_squared(a:K2_GetActorLocation(), location) <= radius_squared
                 or distance_squared(b:K2_GetActorLocation(), location) <= radius_squared then
@@ -538,15 +610,16 @@ local function widen_at(key, position)
     return first + (second - first) * (at - index)
 end
 
-local function play_scene_sound(kind, key, ghost, position)
+-- position only has to rise steadily: it says when a slurp may play again.
+local function play_scene_sound(state, kind, key, ghost, position)
     local mouth = ghost.Mesh:GetSocketLocation(fname("mouth_ent"))
     if kind == "kiss" then
-        scene.kiss.mouth = { X = mouth.X, Y = mouth.Y, Z = mouth.Z }
-        play_sound(scene.kiss, ghost, random_between(0.6, 0.8))
+        state.kiss.mouth = { X = mouth.X, Y = mouth.Y, Z = mouth.Z }
+        play_sound(state.kiss, ghost, random_between(0.6, 0.8))
         return
     end
     local entry = SOUNDS[kind]
-    if kind == "suck" and position < scene.slurp_until[key] then
+    if kind == "suck" and position < state.slurp_until[key] then
         return
     end
     local sound = load_by_package(entry[1], entry[2])
@@ -559,7 +632,7 @@ local function play_scene_sound(kind, key, ghost, position)
         if type(duration) ~= "number" or duration <= 0.0 or duration > LONGEST_SLURP_SECONDS then
             duration = LONGEST_SLURP_SECONDS
         end
-        scene.slurp_until[key] = position + duration * 0.8
+        state.slurp_until[key] = position + duration * 0.8
     end
     StaticFindObject("/Script/Engine.Default__GameplayStatics"):PlaySoundAtLocation(ghost, sound, mouth,
         { Pitch = 0, Yaw = 0, Roll = 0 }, entry[3], random_between(0.95, 1.05), 0.0, nil, nil, nil, nil)
@@ -572,7 +645,7 @@ local function spurt(player)
         log("Could not load the cum effect")
         return
     end
-    local yaw = ModRef:GetSharedVariable(CUM_YAW_VARIABLE) or CUM_YAW
+    local yaw = CUM_YAW
     library:SpawnSystemAttached(system, player.Mesh, fname(CUM_BONE), { X = 0, Y = 0, Z = 0 },
         { Pitch = 0, Yaw = yaw, Roll = 0 }, KEEP_RELATIVE_OFFSET, true, true, NO_POOLING, true)
     log("Spurt at yaw " .. yaw)
@@ -593,6 +666,21 @@ local function restore_player(player, saved)
     if valid(player.Controller) then
         player:EnableInput(player.Controller)
     end
+end
+
+-- The game's own lust check for its scenes, with its own message when it fails.
+local function lust_ok(player, ghost)
+    local ok, enough = pcall(function()
+        return player.CurrentLust >= ghost.LustRequirement
+    end)
+    if not ok or enough then
+        return true
+    end
+    local shown, message = pcall(function()
+        StaticFindObject(COMMON_LIBRARY):ShowHudMessage(FText(LUST_MESSAGE), LUST_COLOUR, player)
+    end)
+    log("Lust is too low for a scene" .. (shown and "" or ", and the message failed: " .. tostring(message)))
+    return false
 end
 
 -- Ends the scene. The pair goes back to kissing where it was, unless it was hurt or lost a ghost.
@@ -624,6 +712,11 @@ local function end_scene(live, player, reason, wake)
     -- chose this over a look-alike, knowing the game also writes the count to its online leaderboard. Without the perk
     -- nothing dissolves, so check_purifying sends the pair back to kissing.
     if reason == "finished" and ghosts.a and ghosts.b then
+        local perk_ok, perk = pcall(function()
+            return StaticFindObject(PERK_LIBRARY):HasPerk(fname("Purification"), ghosts.a)
+        end)
+        local known = perk_ok and type(perk) == "boolean"
+        log("Purification perk: " .. (known and tostring(perk) or "unknown, " .. tostring(perk)))
         local called = 0
         for _, ghost in pairs(ghosts) do
             local ok, message = pcall(function()
@@ -635,9 +728,16 @@ local function end_scene(live, player, reason, wake)
                 log("Could not run the end of scene sequence: " .. tostring(message))
             end
         end
-        if called > 0 then
+        if called > 0 and known and perk then
+            log("Purified the pair")
+            return
+        end
+        if called > 0 and not known then
             table.insert(purifying, { pair = pair, check_at = clock + PURIFY_CHECK_SECONDS })
             return
+        end
+        if called > 0 then
+            log("No Purification perk, so the pair was not purified and goes back to kissing")
         end
     end
     local anim = load_anim()
@@ -685,6 +785,15 @@ local function start_scene(kind, pair, live, player)
         return
     end
     remove_pair(pair)
+    for _, key in ipairs({ "a", "b" }) do
+        local ghost = live[pair[key .. "_address"]]
+        set_prompt(ghost, pair["saved_" .. key], false)
+        set_trace_only(ghost, pair["saved_" .. key], false)
+        if ghost then
+            ghost:SetActorEnableCollision(false) -- The clips put the ghosts where the player stands.
+        end
+    end
+    pair.traceable = false
     local mesh = player.Mesh
     local roles, watcher = cast(kind, pair, live, player)
     scene = {
@@ -787,7 +896,7 @@ local function update_scene(live)
     while timing.events[scene.next_event] and timing.events[scene.next_event][1] <= position do
         local event = timing.events[scene.next_event]
         scene.next_event = scene.next_event + 1
-        play_scene_sound(event[3], event[2], ghosts[event[2]], position)
+        play_scene_sound(scene, event[3], event[2], ghosts[event[2]], position)
     end
     for _, at in ipairs(timing.spurts) do
         if scene.last_position < at and position >= at then
@@ -795,6 +904,410 @@ local function update_scene(live)
         end
     end
     scene.last_position = position
+end
+
+-- The neck scene in the game's own scene lists. ----------------------------------------------------------------------
+
+-- A row added to the LostSoul's scene table at run time puts Neck beside the game's own blowjob: in the Free Mode
+-- ghost's scene list, switched with D, and among the Sex scenes on the game's wheel. The row has no montages, so the
+-- game's scene handler runs everything else as it does for its own scenes: the camera, the stages on W and S, the climax
+-- bar, the climax on W once the bar is full, and purifying or ending afterwards. This mod plays its clips for the stage
+-- the handler is on and sends the events the game's own montages send: CLevel at each thrust, then Purification.
+local NECK_TIMING = require("neck_stages")
+local SEX_TABLE_PACKAGE = "/Game/Blueprints/Player/Interactions/DT_LostSoulSex"
+local SEX_TABLE_NAME = "DT_LostSoulSex"
+local SOURCE_ROW = "Test" -- The game's blowjob from the front, which the Neck row starts as a copy of.
+local NECK_ROW = "GhostKissNeck"
+local NECK_TAG = "GhostKissNeck" -- Added to the row's scene tags, which tells this mod that a scene is its own.
+local NECK_TITLE = "Neck"
+local FREE_MODE_LIST = "/Game/Blueprints/AI/Enemies/FreemodeInfo/DIS_Lost.DIS_Lost:DE_StartSceneSelector_C_0"
+local SELECTOR_CLASS = "BP_SelectableSceneActor_C"
+local EVENT_LIBRARY = "/Script/EasyEventSystem.Default__EasyEventManagerLibrary"
+local GAME_MONTAGE_PACKAGE = "/Game/Models/Characters/Monsters/LostSoul/Anims/Sex_LostSoul_Montage"
+local GAME_MONTAGE_NAME = "Sex_LostSoul_Montage"
+-- The scene table's fields, named as the game's struct names them.
+local FIELD = {
+    name = "Name_2_238638F249DE6D7D55C2828B6A7E9B20",
+    animation = "Animation_18_B3E1E06D4393F322E226088A34C4879A",
+    player_montage = "PlayerMontage_2_3C1386214D3CDFDAA0CB969D98F9E52A",
+    npc_montage = "NPCMontage_4_EFDFA2E449426E7EFF4CCAB705208D09",
+    unconscious = "NPCUnconscious_12_3F39B04B4A2BD0A8C24E399443E241F1",
+    context = "ContextualSettings_74_8BB80D564193B78460CB0E8348A96875",
+    can_context = "CanBeContextual_12_52D8872D45F50F894920D3AB612C9673",
+    tags = "SceneTags_94_C7BDFD0D4FC07F9E3783DEB587897D1C",
+}
+local GHOST_SLOT = "DefaultOverride" -- The montage slots the game's own LostSoul scene plays in.
+local PLAYER_SLOT = "DefaultSlot"
+local STAGE_CLIPS = { "Loop1", "Loop2", "Loop3" } -- By the handler's stage, counted from 0.
+local CLIP_BLEND_SECONDS = 0.2
+local LOOP_COUNT = 10000 -- A stage's clip loops until the player changes stage. Its position runs on over the loops.
+local SYNC_SECONDS = 0.05 -- The ghost's clip is put back in step with the player's when further apart than this.
+-- A clip played once hands over this long before its end, ahead of its own blend out and with ticks to spare.
+local HAND_OVER_SECONDS = CLIP_BLEND_SECONDS + 0.15
+
+local game_scene = nil -- The game's scene handler running the Neck scene, while it does.
+local neck_lists = {} -- The table and list objects already given the Neck scene, by address.
+local knock_down_settings = nil -- What the game's own scene does to the ghost at its very end, read from its montage.
+
+local function call_event(handler, name)
+    StaticFindObject(EVENT_LIBRARY):CallEvent(handler, fname(name), "", nil)
+end
+
+local function sex_table()
+    local dt = StaticFindObject(SEX_TABLE_PACKAGE .. "." .. SEX_TABLE_NAME)
+    if valid(dt) then
+        return dt
+    end
+    return load_by_package(SEX_TABLE_PACKAGE, SEX_TABLE_NAME)
+end
+
+-- Both are game objects that can be loaded again, so each new one is checked once.
+local function add_neck_to_lists()
+    local list = StaticFindObject(FREE_MODE_LIST)
+    local dt = StaticFindObject(SEX_TABLE_PACKAGE .. "." .. SEX_TABLE_NAME)
+    if not valid(dt) and valid(list) then
+        dt = sex_table()
+    end
+    if valid(dt) and not neck_lists[dt:GetAddress()] then
+        neck_lists[dt:GetAddress()] = true
+        if not dt:FindRow(NECK_ROW) then
+            local source = dt:FindRow(SOURCE_ROW)
+            if not source then
+                log("The LostSoul's scene table has no " .. SOURCE_ROW .. " row to copy")
+                return
+            end
+            dt:AddRow(NECK_ROW, source)
+            local row = dt:FindRow(NECK_ROW)
+            row[FIELD.name] = FText(NECK_TITLE)
+            local animation = row[FIELD.animation]
+            animation[FIELD.player_montage] = nil
+            animation[FIELD.npc_montage] = nil
+            animation[FIELD.unconscious] = nil
+            -- The game picks its contextual scenes at random; those stay its own.
+            row[FIELD.context][FIELD.can_context] = false
+            local tags = row[FIELD.tags]
+            tags[tags:GetArrayNum() + 1] = fname(NECK_TAG)
+            log("Added the Neck scene to the LostSoul's scene table")
+        end
+    end
+    if valid(dt) and valid(list) and not neck_lists[list:GetAddress()] then
+        neck_lists[list:GetAddress()] = true
+        local scenes = list.Scenes
+        for i = 1, scenes:GetArrayNum() do
+            if scenes[i].RowName:ToString() == NECK_ROW then
+                return
+            end
+        end
+        scenes[scenes:GetArrayNum() + 1] = { DataTable = dt, RowName = fname(NECK_ROW) }
+        log("Added the Neck scene to the Free Mode ghost's scene list")
+    end
+end
+
+local function is_neck_scene(handler)
+    local ours = false
+    pcall(function()
+        local tags = handler.SexSceneInfo[FIELD.tags]
+        for i = 1, tags:GetArrayNum() do
+            if tags[i]:ToString() == NECK_TAG then
+                ours = true
+            end
+        end
+    end)
+    return ours
+end
+
+-- The clip playing in a mesh's slot, if it is still the one this mod started there.
+local function neck_montage(mesh, address)
+    local instance = mesh:GetAnimInstance()
+    if not valid(instance) then
+        return nil
+    end
+    local montage = instance:GetCurrentActiveMontage()
+    if not valid(montage) or montage:GetAddress() ~= address then
+        return nil
+    end
+    return instance, montage
+end
+
+local function play_neck_clip(state, ghost, player, name)
+    local timing = NECK_TIMING.clips[name]
+    local played = {}
+    for key, part in pairs({ ghost = { ghost.Mesh, GHOST_SLOT, "AS_LostSoul_Neck" },
+        player = { player.Mesh, PLAYER_SLOT, "AS_Player_GhostNeck" } }) do
+        local asset = part[3] .. name
+        local clip = load_by_package(SCENE_DIR .. asset, asset)
+        if not clip then
+            error("Could not load the neck clip " .. asset)
+        end
+        -- A clip played once only starts blending out at its very end, which the mod never lets it reach.
+        local montage = part[1]:GetAnimInstance():PlaySlotAnimationAsDynamicMontage(clip, fname(part[2]),
+            CLIP_BLEND_SECONDS, CLIP_BLEND_SECONDS, 1.0, timing.cycle and LOOP_COUNT or 1, 0.0, 0.0)
+        if not valid(montage) then
+            error("Could not play the neck clip " .. asset)
+        end
+        played[key] = montage:GetAddress()
+    end
+    state.montages = played
+    state.clip = name
+    state.last_position = 0.0
+end
+
+-- The clips are authored with the ghost's origin on one spot in the player's space, facing the way the player does.
+-- The game's scene puts both on one spot, so the ghost's mesh is moved there within its actor.
+local function place_neck_ghost(player, ghost)
+    local mesh = ghost.Mesh
+    mesh:SetWorldScale3D({ X = 1.0, Y = 1.0, Z = 1.0 })
+    mesh:K2_SetWorldLocationAndRotation(player_space(player, NECK_TIMING.ghost_root), player.Mesh:K2_GetComponentRotation(),
+        false, {}, true)
+end
+
+local function sample(values, position)
+    local at = position * NECK_TIMING.widen_fps
+    local index = math.floor(at)
+    local first = values[index + 1] or values[#values]
+    local second = values[index + 2] or first
+    return first + (second - first) * (at - index)
+end
+
+-- The game's own scene knocks the ghost down as its montage ends, with its notify's settings.
+local function knock_down(ghost)
+    if not knock_down_settings then
+        local montage = load_by_package(GAME_MONTAGE_PACKAGE, GAME_MONTAGE_NAME)
+        local notifies = montage.Notifies
+        for i = 1, notifies:GetArrayNum() do
+            local notify = notifies[i].Notify
+            if valid(notify) and notify:GetClass():GetFName():ToString() == "AnimNotify_Ragdoll_C" then
+                knock_down_settings = { knocked = notify.KnockedOut, dead = notify.Dead }
+            end
+        end
+        if not knock_down_settings then
+            knock_down_settings = {}
+            log("The game's LostSoul scene has no ragdoll at its end")
+        end
+    end
+    if knock_down_settings.knocked ~= nil then
+        ghost.BPC_HealthComponent:SetKnockDown(knock_down_settings.knocked, knock_down_settings.dead)
+    end
+end
+
+local function is_dissolving(ghost)
+    local ok, playing = pcall(function()
+        return ghost.DissolveTimeline:IsPlaying()
+    end)
+    return ok and playing
+end
+
+local function begin_game_scene(player, handler)
+    local ghost = handler.InteractedActor
+    if not valid(ghost) or ghost:GetClass():GetFName():ToString() ~= GHOST_CLASS then
+        error("the scene is not on a LostSoul")
+    end
+    -- In Free Mode the scene list's own actor ends the scene after purifying, and switches scenes.
+    local in_list = false
+    for _, actor in ipairs(FindAllOf(SELECTOR_CLASS) or {}) do
+        if valid(actor.CurrentScene) and actor.CurrentScene:GetAddress() == handler:GetAddress() then
+            in_list = true
+        end
+    end
+    local mesh = ghost.Mesh
+    local location, rotation, scale = mesh.RelativeLocation, mesh.RelativeRotation, mesh.RelativeScale3D
+    game_scene = {
+        handler_address = handler:GetAddress(),
+        ghost_address = ghost:GetAddress(),
+        in_list = in_list,
+        saved = {
+            location = { X = location.X, Y = location.Y, Z = location.Z },
+            rotation = { Pitch = rotation.Pitch, Yaw = rotation.Yaw, Roll = rotation.Roll },
+            scale = { X = scale.X, Y = scale.Y, Z = scale.Z },
+            update_rate = mesh.bEnableUpdateRateOptimizations,
+            tick_option = mesh.VisibilityBasedAnimTickOption,
+            player_tick_option = player.Mesh.VisibilityBasedAnimTickOption,
+        },
+        slurp_until = { a = 0.0 },
+        kiss = {},
+    }
+    -- The update rate optimisation would let the two clips drift apart.
+    mesh.bEnableUpdateRateOptimizations = false
+    mesh.VisibilityBasedAnimTickOption = 0
+    player.Mesh.VisibilityBasedAnimTickOption = 0
+    -- The game's own player montage turns the camera on as it starts; this row has none.
+    player:EnableCamera(true)
+    if valid(player.Controller) then
+        player.Controller:SetControlRotation({ Pitch = LOOK_PITCH_DEG, Yaw = player:K2_GetActorRotation().Yaw, Roll = 0 })
+    end
+    place_neck_ghost(player, ghost)
+    play_neck_clip(game_scene, ghost, player, "Enter")
+    log("Neck scene started from the game's scene list" .. (in_list and " in Free Mode" or ""))
+end
+
+local function finish_game_scene(live, player, reason)
+    local state = game_scene
+    game_scene = nil
+    log("Neck scene ended: " .. reason)
+    local ghost = live[state.ghost_address]
+    local meshes = { ghost = ghost and ghost.Mesh, player = player and player.Mesh }
+    for key, mesh in pairs(meshes) do
+        if mesh then
+            -- Only this mod's own clip: after a switch in the scene list the game's next scene is already playing.
+            local instance, montage = neck_montage(mesh, state.montages[key])
+            if instance then
+                instance:Montage_Stop(CLIP_BLEND_SECONDS, montage)
+            end
+        end
+    end
+    if ghost then
+        local mesh = ghost.Mesh
+        mesh:SetMorphTarget(fname(WIDEN_MORPH), 0.0, true)
+        mesh:K2_SetRelativeLocationAndRotation(state.saved.location, state.saved.rotation, false, {}, true)
+        mesh:SetRelativeScale3D(state.saved.scale)
+        mesh.bEnableUpdateRateOptimizations = state.saved.update_rate
+        mesh.VisibilityBasedAnimTickOption = state.saved.tick_option
+    end
+    if player then
+        player.Mesh.VisibilityBasedAnimTickOption = state.saved.player_tick_option
+    end
+end
+
+-- The game's own way out of a scene, through the Free Mode scene list when that started it.
+local function leave_scene(handler)
+    for _, actor in ipairs(FindAllOf(SELECTOR_CLASS) or {}) do
+        if valid(actor.CurrentScene) and actor.CurrentScene:GetAddress() == handler:GetAddress() then
+            actor:EndAnyScene()
+            return
+        end
+    end
+    handler:ForceEndScene()
+end
+
+-- When this mod cannot run the scene, so the player is not left in a scene that never ends.
+local function abort_game_scene(live, player, reason)
+    local state = game_scene
+    local handler = player and player.CurrentSScene
+    finish_game_scene(live, player, reason)
+    if valid(handler) and handler:GetAddress() == state.handler_address then
+        leave_scene(handler)
+    end
+end
+
+local function drive_game_scene(live, player, handler)
+    local state = game_scene
+    local ghost = handler.InteractedActor
+    if not valid(ghost) then
+        -- Gone before the clip ended: the game's own scene ends its interaction with the clip, so this one does now.
+        finish_game_scene(live, player, "the ghost is gone")
+        if not state.in_list and player.InInteraction then
+            player:EndInteraction()
+        end
+        return
+    end
+    place_neck_ghost(player, ghost)
+    local timing = NECK_TIMING.clips[state.clip]
+    local instance, montage = neck_montage(player.Mesh, state.montages.player)
+    if not instance then
+        -- Something else took the slot over. A stage's loop starts again, the entry goes on to the stage, and the
+        -- climax is over.
+        if state.clip == "Enter" then
+            play_neck_clip(state, ghost, player, STAGE_CLIPS[handler.CurrentStage + 1] or STAGE_CLIPS[1])
+        elseif state.clip ~= "End" then
+            play_neck_clip(state, ghost, player, state.clip)
+        end
+        return
+    end
+    local raw = instance:Montage_GetPosition(montage)
+    local position = timing.cycle and raw % timing.length or raw
+    local ghost_instance, ghost_montage = neck_montage(ghost.Mesh, state.montages.ghost)
+    if ghost_instance and math.abs(ghost_instance:Montage_GetPosition(ghost_montage) - raw) > SYNC_SECONDS then
+        ghost_instance:Montage_SetPosition(ghost_montage, raw)
+    end
+    ghost.Mesh:SetMorphTarget(fname(WIDEN_MORPH), sample(timing.widen, position) * WIDEN_SCALE, false)
+
+    local from = state.last_position
+    local wrapped = position < from
+    local function crossed(at)
+        if wrapped then
+            return at > from or at <= position
+        end
+        return at > from and at <= position
+    end
+    for _, event in ipairs(timing.events) do
+        if crossed(event[1]) then
+            play_scene_sound(state, event[2], "a", ghost, clock)
+        end
+    end
+    if not handler.EndingSequence then
+        for _, at in ipairs(timing.counts) do
+            if crossed(at) then
+                call_event(handler, "CLevel")
+            end
+        end
+    end
+    for _, at in ipairs(timing.spurts) do
+        if crossed(at) then
+            spurt(player)
+        end
+    end
+    if timing.purify and crossed(timing.purify) then
+        log("Neck scene purifying")
+        call_event(handler, "Purification")
+    end
+    state.last_position = position
+
+    -- The handler's stage picks the loop; once the climax bar is full and the player goes on, its climax plays.
+    local wanted = handler.EndingSequence and "End" or STAGE_CLIPS[handler.CurrentStage + 1] or STAGE_CLIPS[#STAGE_CLIPS]
+    if state.clip == "Enter" then
+        if position >= timing.length - HAND_OVER_SECONDS then
+            log("Neck scene clip " .. wanted)
+            play_neck_clip(state, ghost, player, wanted)
+        end
+    elseif state.clip == "End" then
+        if not state.frozen and position >= timing.length - HAND_OVER_SECONDS then
+            -- Held on its last pose rather than blending back to the ghost's own animation.
+            state.frozen = true
+            instance:Montage_SetPlayRate(montage, 0.0)
+            if ghost_instance then
+                ghost_instance:Montage_SetPlayRate(ghost_montage, 0.0)
+            end
+            -- In Free Mode the scene list ends it once purified. Elsewhere it ends as the game's own montages end it.
+            if not state.in_list then
+                if not is_dissolving(ghost) then
+                    local knocked, message = pcall(knock_down, ghost)
+                    log(knocked and "Neck scene knocked the ghost down" or "Could not knock the ghost down: " .. tostring(message))
+                end
+                player:EndInteraction()
+            end
+        end
+    elseif wanted ~= state.clip then
+        -- Every loop passes the shallow end of a thrust once a cycle, where the clips meet.
+        if wrapped or math.floor(position / timing.cycle) ~= math.floor(from / timing.cycle) then
+            log("Neck scene clip " .. wanted)
+            play_neck_clip(state, ghost, player, wanted)
+        end
+    end
+end
+
+local function update_game_scene(live)
+    local player = current_player()
+    local handler = player and player.CurrentSScene
+    -- A destroyed handler still reads as valid until it is cleaned up, and the player's interaction ends with it.
+    local current = valid(handler) and player.InInteraction and handler or nil
+    if game_scene and (not current or current:GetAddress() ~= game_scene.handler_address) then
+        finish_game_scene(live, player, "the game's scene ended")
+    end
+    if current and not game_scene and not scene and is_neck_scene(current) then
+        local ok, message = pcall(begin_game_scene, player, current)
+        if not ok then
+            log("Could not start the neck scene: " .. tostring(message))
+            if game_scene then
+                abort_game_scene(live, player, "could not start")
+            else
+                leave_scene(current)
+            end
+            return
+        end
+    end
+    if game_scene then
+        drive_game_scene(live, player, current)
+    end
 end
 
 -- The nearest kissing pair ahead of the player and within reach. From the admin panel, the nearest anywhere.
@@ -843,33 +1356,116 @@ local function spawn_admin_pair(player)
     log("Spawned a kissing pair from the admin panel")
 end
 
-local key_pressed = false
-local neck_key_pressed = false
+local key_seen = false -- E reached the key callback since the last tick. Held, it does every frame.
+local key_quiet_ticks = 0
+local KEY_RELEASE_TICKS = 3 -- E unseen this many ticks counts as released.
 local admin_grab = nil -- The scene the admin panel asked for.
+local hold_requests = {} -- Pairs whose hold the mod took over this tick.
+local hooked = {}
+
+local holds = {} -- Pair ghosts the player is holding E on, by address: when the game's hold timer started.
+
+local function game_seconds()
+    return StaticFindObject("/Script/Engine.Default__GameplayStatics"):GetTimeSeconds(UEHelpers.GetWorld())
+end
+
+-- The game's hold timer on a pair ghost is about to finish: the mod ends it, so the game's own action never runs, and
+-- starts the double scene itself.
+local function check_holds(live)
+    for address, started in pairs(holds) do
+        local ghost = live[address]
+        if not ghost or not is_paired(address) then
+            holds[address] = nil
+        else
+            pcall(function()
+                local interact = ghost.BP_InteractableObject
+                if game_seconds() - started >= interact.InteractTime - HOLD_TAKEOVER_SECONDS then
+                    holds[address] = nil
+                    interact:CancelHeldInteraction()
+                    for _, pair in ipairs(active_pairs) do
+                        if pair.a_address == address or pair.b_address == address then
+                            table.insert(hold_requests, { pair = pair, ghost = address })
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end
+
+local function on_hold_start(interact)
+    local owner = interact:GetOwner()
+    if owner:IsValid() and is_paired(owner:GetAddress()) then
+        holds[owner:GetAddress()] = game_seconds()
+    end
+end
+
+local function on_hold_stop(interact)
+    local owner = interact:GetOwner()
+    if owner:IsValid() then
+        holds[owner:GetAddress()] = nil
+    end
+end
+
+local function on_hold_finished(interact)
+    local owner = interact:GetOwner()
+    if owner:IsValid() and is_paired(owner:GetAddress()) then
+        log("The game's own hold finished on a kissing ghost before the mod took over")
+    end
+end
+
+-- The game's classes load with the level, so the hooks are retried until they register.
+local INTERACT_CLASS = "/Game/Blueprints/Components/BP_InteractableObject.BP_InteractableObject_C"
+
+local function hook_holds()
+    for path, callback in pairs({ [INTERACT_CLASS .. ":StartInteractTimer"] = on_hold_start,
+        [INTERACT_CLASS .. ":CancelHeldInteraction"] = on_hold_stop, [INTERACT_CLASS .. ":FinishInteractTimer"] = on_hold_finished }) do
+        if not hooked[path] then
+            local ok = pcall(RegisterHook, path, function(self)
+                local ok_call, message = pcall(callback, self:get())
+                if not ok_call then
+                    log("Hold hook error: " .. tostring(message))
+                end
+            end)
+            if ok then
+                hooked[path] = true
+                log("Hooked " .. path:match(":(.*)$"))
+            end
+        end
+    end
+end
 
 local function handle_requests(live)
     local player = current_player()
     if not player then
         return
     end
+    local fresh_press = key_seen and key_quiet_ticks >= KEY_RELEASE_TICKS
+    key_quiet_ticks = key_seen and 0 or key_quiet_ticks + 1
+    key_seen = false
     if is_paused(player) then
-        key_pressed, neck_key_pressed = false, false -- Interact pressed in a menu is not a grab.
+        hold_requests = {}
         return
     end
-    if key_pressed or neck_key_pressed then
-        if scene then
-            let_go_requested = true
-        else
-            -- Shift+E may also fire the plain E binding, so the neck scene wins when both came in.
-            grab_requested = neck_key_pressed and "neck" or "double"
-        end
-        key_pressed, neck_key_pressed = false, false
+    -- Only a new press: the hold that started the scene is usually still down when it begins.
+    if fresh_press and scene then
+        let_go_requested = true
     end
+    if not scene then
+        for _, request in ipairs(hold_requests) do
+            local ghost = live[request.ghost]
+            if ghost and lust_ok(player, ghost) and live[request.pair.a_address] and live[request.pair.b_address] then
+                start_scene("double", request.pair, live, player)
+                break
+            end
+        end
+    end
+    hold_requests = {}
     while admin_spawns > 0 do
         admin_spawns = admin_spawns - 1
         spawn_admin_pair(player)
     end
-    local wanted = admin_grab or grab_requested
+    local wanted = admin_grab
     if wanted and not scene then
         local pair = pair_to_grab(live, player, admin_grab ~= nil)
         if pair then
@@ -878,15 +1474,12 @@ local function handle_requests(live)
             log("No kissing pair to grab")
         end
     end
-    grab_requested, admin_grab = false, nil
+    admin_grab = nil
 end
 
 -- The key only raises a flag. Everything else happens on the game thread's tick.
 RegisterKeyBind(Key.E, function()
-    key_pressed = true
-end)
-RegisterKeyBind(Key.E, { ModifierKey.SHIFT }, function()
-    neck_key_pressed = true
+    key_seen = true
 end)
 
 -- Shows in the admin panel if it is installed.
@@ -904,8 +1497,8 @@ admin_tab:AddButton("Let Go", function()
     let_go_requested = true
 end)
 
--- The game dissolves an enemy only for a player with the Purification perk, by playing its dissolve timeline. A pair
--- that is not dissolving was not purified, so it goes back to kissing.
+-- The game dissolves an enemy only for a player with the Purification perk, by playing its dissolve timeline. When the
+-- perk could not be read, a pair that is not dissolving was not purified, so it goes back to kissing.
 local function check_purifying(live)
     for index = #purifying, 1, -1 do
         local entry = purifying[index]
@@ -950,6 +1543,8 @@ local function check_level_change()
             scene = nil
             ModRef:SetSharedVariable(BODY_HOLD_VARIABLE, false)
         end
+        game_scene = nil
+        neck_lists = {}
     end
     return true
 end
@@ -975,10 +1570,16 @@ LoopInGameThreadWithDelay(TICK_MS, function()
         end
     end
     local ok, message = pcall(function()
+        if tick_count % 20 == 0 then
+            hook_holds()
+            add_neck_to_lists()
+        end
+        check_holds(live)
         handle_requests(live)
         if scene then
             update_scene(live)
         end
+        update_game_scene(live)
         check_purifying(live)
     end)
     if not ok then
@@ -990,6 +1591,10 @@ LoopInGameThreadWithDelay(TICK_MS, function()
         if scene then
             pcall(end_scene, live, current_player(), "error", true)
             scene = nil
+        end
+        if game_scene then
+            pcall(abort_game_scene, live, current_player(), "error")
+            game_scene = nil
         end
     end
 end)
