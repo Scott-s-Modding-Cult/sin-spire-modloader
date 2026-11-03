@@ -1,6 +1,6 @@
 # Copies the installed mods from the game's Mods folder into mods\ here, ready to build and commit.
 # Leaves out each player's own files, ModKit, whose source is in core\, and mods too big for this repository, which are on
-# the Releases page instead.
+# the Releases page instead. Then refreshes the mod browser's data in docs\mods\mods.json.
 param([string]$GameDir = (Split-Path (Split-Path $PSScriptRoot)))
 $ErrorActionPreference = "Stop"
 $target = "$PSScriptRoot\mods"
@@ -16,3 +16,4 @@ foreach ($mod in Get-ChildItem "$GameDir\Mods" -Directory | Where-Object { $_.Na
     }
     $mod.Name
 }
+& "$PSScriptRoot\update_mod_browser.ps1"

@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sin Spire Mods</title>
+<meta name="description" content="Browse the mods for the Sin Spire Mod Loader.">
+<style>
+  :root {
+    --bg: #0c0620;
+    --panel: rgba(30, 16, 66, 0.94);
+    --panel-2: rgba(44, 24, 92, 0.9);
+    --button: rgba(58, 32, 112, 0.6);
+    --line: #4d3a8c;
+    --text: #f3edff;
+    --muted: #c4b5e8;
+    --accent: #c084fc;
+    --accent-hover: #d8b4fe;
+    --on-accent: #1a0b38;
+    --warn: #fbbf24;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  /* Same nebula as the support page. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background:
+      radial-gradient(1px 1px at 12% 18%, #fff, transparent),
+      radial-gradient(1.5px 1.5px at 27% 72%, #fff, transparent),
+      radial-gradient(1px 1px at 38% 34%, #e9d5ff, transparent),
+      radial-gradient(2px 2px at 52% 88%, #fff, transparent),
+      radial-gradient(1px 1px at 63% 12%, #fff, transparent),
+      radial-gradient(1.5px 1.5px at 74% 46%, #f5d0fe, transparent),
+      radial-gradient(1px 1px at 85% 80%, #fff, transparent),
+      radial-gradient(2px 2px at 91% 24%, #e9d5ff, transparent),
+      radial-gradient(1px 1px at 6% 55%, #fff, transparent),
+      radial-gradient(1.5px 1.5px at 46% 6%, #fff, transparent),
+      radial-gradient(circle at 15% 20%, rgba(168, 85, 247, 0.45), transparent 45%),
+      radial-gradient(circle at 85% 80%, rgba(217, 70, 239, 0.32), transparent 45%),
+      radial-gradient(circle at 70% 15%, rgba(79, 70, 229, 0.35), transparent 40%);
+  }
+  a { color: var(--text); }
+  a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--text);
+    outline-offset: 2px;
+  }
+
+  nav {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 18px;
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 18px 16px;
+  }
+  nav .brand { font-weight: 700; text-decoration: none; margin-right: auto; }
+  nav a:not(.brand) { color: var(--muted); text-decoration: none; }
+  nav a:not(.brand):hover, nav a[aria-current] { color: var(--text); }
+
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px 48px; }
+  header h1 { margin: 12px 0 6px; font-size: 34px; line-height: 1.2; }
+  header p { margin: 0 0 20px; color: var(--muted); max-width: 640px; }
+
+  .install {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .install div {
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel);
+    font-size: 14px;
+    color: var(--muted);
+  }
+  .install strong { display: block; color: var(--text); font-size: 15px; margin-bottom: 2px; }
+  .install code { color: var(--text); }
+
+  .tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 18px; }
+  .tools input {
+    flex: 1 1 220px;
+    min-width: 0;
+    padding: 10px 14px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--text);
+    font: inherit;
+  }
+  .tools input::placeholder { color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    padding: 6px 12px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--button);
+    color: var(--muted);
+    font: inherit;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .chip:hover { color: var(--text); }
+  .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--panel);
+    overflow: hidden;
+  }
+  .card:hover { border-color: var(--muted); }
+  .banner {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    height: 84px;
+    padding: 12px 16px;
+    background: var(--tint);
+    font-size: 40px;
+    line-height: 1;
+  }
+  .banner .cat {
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: rgba(12, 6, 32, 0.6);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+  .body { display: flex; flex-direction: column; flex: 1; padding: 14px 16px 16px; }
+  .card h2 { margin: 0 0 4px; font-size: 20px; line-height: 1.3; }
+  .summary { margin: 0 0 12px; color: var(--muted); font-size: 15px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .tag {
+    padding: 2px 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .tag.key { border-color: var(--accent); color: var(--text); font-family: ui-monospace, Consolas, monospace; }
+  .tag.off { border-color: var(--warn); color: var(--warn); }
+
+  details { margin: 0 0 14px; font-size: 14px; }
+  summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+  summary:hover { color: var(--accent-hover); }
+  details p { margin: 10px 0 0; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 10px 0 0; }
+  dt { color: var(--muted); }
+  dd { margin: 0; }
+
+  .foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .button {
+    padding: 7px 14px;
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-weight: 600;
+    font-size: 14px;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .button:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .button.ghost { background: var(--button); border-color: var(--line); color: var(--muted); }
+
+  .empty { padding: 24px; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); text-align: center; }
+  .fine { margin-top: 32px; color: var(--muted); font-size: 14px; }
+
+  /* Age notice */
+  .gate {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(12, 6, 32, 0.92);
+    backdrop-filter: blur(6px);
+  }
+  .gate[hidden] { display: none; }
+  .gate > div {
+    max-width: 420px;
+    padding: 26px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--panel);
+    text-align: center;
+  }
+  .gate h2 { margin: 0 0 8px; }
+  .gate p { margin: 0 0 18px; color: var(--muted); }
+  .gate .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .gate button { font: inherit; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="gate" id="gate" hidden>
+  <div role="dialog" aria-modal="true" aria-labelledby="gate-title">
+    <h2 id="gate-title">Adult content</h2>
+    <p>Most of these mods add sexual content to Sin Spire. You must be 18 or older to continue.</p>
+    <div class="row">
+      <button class="button" id="gate-yes">I'm 18 or older</button>
+      <a class="button ghost" href="https://www.google.com/">Leave</a>
+    </div>
+  </div>
+</div>
+
+<nav>
+  <a class="brand" href="../">Sin Spire Mod Loader</a>
+  <a href="./" aria-current="page">Mods</a>
+  <a href="https://github.com/scottricity/sin-spire-modloader/releases">Download patch</a>
+  <a href="../">Support</a>
+  <a href="https://github.com/scottricity/sin-spire-modloader">GitHub</a>
+</nav>
+
+<div class="wrap">
+  <header>
+    <h1>Mods</h1>
+    <p>Every mod here works with the Sin Spire Mod Loader. Most come with the patch already; the rest you can add from the Mod Manager.</p>
+  </header>
+
+  <section class="install" aria-label="How to install">
+    <div><strong>1. Patch the game</strong>Run <code>SinSpire-ModLoader-Patch.exe</code> from the <a href="https://github.com/scottricity/sin-spire-modloader/releases">releases page</a>. It finds the game and installs the loader.</div>
+    <div><strong>2. Get mods</strong>Hold Shift while launching, or run <code>Mod Manager.bat</code>, and use the <b>Get Mods</b> tab. Or unzip a download into the game's <code>Mods</code> folder.</div>
+    <div><strong>3. Play</strong>Tick the mods you want in the Mod Manager. Changes take effect on the next launch.</div>
+  </section>
+
+  <div class="tools">
+    <input id="search" type="search" placeholder="Search mods" aria-label="Search mods">
+    <div class="chips" id="chips" role="group" aria-label="Filter by category"></div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <p class="fine">Mods are made for Sin Spire and need your own copy of the game. This project isn't affiliated with the game's developers. Third-party assets are listed in the <a href="https://github.com/scottricity/sin-spire-modloader/blob/main/CREDITS.txt">credits</a>.</p>
+</div>
+
+<script>
+  // The mods come from mods.json, which update_mod_browser.ps1 fills in. Each mod's category must be one of these.
+  const CATEGORIES = [
+    { name: "Scenes", tint: "linear-gradient(135deg, #a21caf, #6d28d9)" },
+    { name: "Gameplay", tint: "linear-gradient(135deg, #be123c, #7c3aed)" },
+    { name: "Maps", tint: "linear-gradient(135deg, #a16207, #4d3a8c)" },
+    { name: "Visual", tint: "linear-gradient(135deg, #0e7490, #4f46e5)" },
+    { name: "Tools", tint: "linear-gradient(135deg, #4338ca, #312e81)" },
+  ];
+
+  const RAW = "https://github.com/scottricity/sin-spire-modloader/raw/main/mods/";
+  const grid = document.getElementById("grid");
+  const search = document.getElementById("search");
+  const chips = document.getElementById("chips");
+  let category = "All";
+  let MODS = [];
+
+  function el(tag, cls, text) {
+    const node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+
+  function size(bytes) {
+    const mb = bytes / 1048576;
+    return mb < 1 ? Math.max(1, Math.round(bytes / 1024)) + " KB" : mb.toFixed(1) + " MB";
+  }
+
+  function card(mod) {
+    const cat = CATEGORIES.find(c => c.name === mod.category) || CATEGORIES[CATEGORIES.length - 1];
+    const root = el("article", "card");
+
+    const banner = el("div", "banner");
+    banner.style.setProperty("--tint", cat.tint);
+    const icon = el("span", null, mod.icon);
+    icon.setAttribute("aria-hidden", "true");
+    banner.append(icon, el("span", "cat", mod.category));
+
+    const body = el("div", "body");
+    body.append(el("h2", null, mod.title), el("p", "summary", mod.summary));
+
+    const tags = el("div", "tags");
+    for (const key of mod.keys || []) tags.append(el("span", "tag key", key));
+    if (mod.defaultOff) tags.append(el("span", "tag off", "Off by default"));
+    if (mod.alwaysOn) tags.append(el("span", "tag", "Always on"));
+    tags.append(el("span", "tag", mod.preset ? "Comes with patch" : "Get Mods only"));
+    for (const need of mod.requires || []) tags.append(el("span", "tag", "Needs " + need));
+    body.append(tags);
+
+    const more = el("details");
+    more.append(el("summary", null, "Details"));
+    if (mod.details) more.append(el("p", null, mod.details));
+    const info = el("dl");
+    const rows = [
+      ["Version", mod.version],
+      ["Keys", (mod.keys || []).join(", ") || "None"],
+      ["Requires", (mod.requires || []).join(", ") || "Nothing"],
+      ["Loads after", (mod.loadAfter || []).join(", ")],
+      ["Default", mod.alwaysOn ? "Always on" : mod.defaultOff ? "Off" : "On"],
+    ];
+    for (const [k, v] of rows) if (v) info.append(el("dt", null, k), el("dd", null, v));
+    more.append(info);
+    body.append(more);
+
+    const foot = el("div", "foot");
+    foot.append(el("span", null, "v" + mod.version + (mod.bytes ? " · " + size(mod.bytes) : "")));
+    if (mod.zip) {
+      const a = el("a", "button", "Download");
+      a.href = RAW + mod.zip;
+      a.setAttribute("aria-label", "Download " + mod.title);
+      foot.append(a);
+    } else {
+      const a = el("a", "button ghost", "Get the patch");
+      a.href = "https://github.com/scottricity/sin-spire-modloader/releases";
+      foot.append(a);
+    }
+    body.append(foot);
+    root.append(banner, body);
+    return root;
+  }
+
+  function render() {
+    const q = search.value.trim().toLowerCase();
+    const shown = MODS.filter(m =>
+      (category === "All" || m.category === category) &&
+      (!q || [m.title, m.summary, m.details, m.category].join(" ").toLowerCase().includes(q)));
+    grid.replaceChildren(...shown.map(card));
+    if (!shown.length) grid.append(el("div", "empty", "No mods match that search."));
+  }
+
+  function chipsFor() {
+    for (const name of ["All", ...CATEGORIES.map(c => c.name)]) {
+      if (name !== "All" && !MODS.some(m => m.category === name)) continue;
+      const b = el("button", "chip", name);
+      b.type = "button";
+      b.setAttribute("aria-pressed", String(name === category));
+      b.addEventListener("click", () => {
+        category = name;
+        for (const c of chips.children) c.setAttribute("aria-pressed", String(c === b));
+        render();
+      });
+      chips.append(b);
+    }
+  }
+  search.addEventListener("input", render);
+  fetch("mods.json", { cache: "no-cache" })
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(data => { MODS = data.mods; chipsFor(); render(); })
+    .catch(() => grid.replaceChildren(el("div", "empty", "The mod list couldn't be loaded. Try refreshing the page.")));
+
+  // Age notice, remembered per browser when storage is allowed.
+  const gate = document.getElementById("gate");
+  let seen = false;
+  try { seen = localStorage.getItem("adult-ok") === "1"; } catch (e) {}
+  if (!seen) {
+    gate.hidden = false;
+    document.getElementById("gate-yes").focus();
+  }
+  document.getElementById("gate-yes").addEventListener("click", () => {
+    try { localStorage.setItem("adult-ok", "1"); } catch (e) {}
+    gate.hidden = true;
+  });
+</script>
+</body>
+</html>

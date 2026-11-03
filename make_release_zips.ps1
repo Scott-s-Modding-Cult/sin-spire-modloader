@@ -1,7 +1,8 @@
 # Zips installed mods from the game's Mods folder, one per mod, into dist\release for attaching to a GitHub Release.
 # Each zip holds the mod's folder, so it unpacks straight into Mods. Leaves out each player's own files.
 # -InMods puts the zips in mods\ instead, ready to commit. Unless -Mods names some, that is every mod in mods\ and Backrooms,
-# whose folder is too big for this repository but whose zip is not. Run sync_mods.ps1 first.
+# whose folder is too big for this repository but whose zip is not, and the mod browser's data in docs\mods\mods.json is
+# refreshed. Run sync_mods.ps1 first.
 param(
     [string[]]$Mods = @("AdminPanel", "Backrooms", "BodyVisible", "MonitorSetting"),
     [string]$GameDir = (Split-Path (Split-Path $PSScriptRoot)),
@@ -39,3 +40,4 @@ foreach ($mod in $Mods) {
 }
 Remove-Item $stage -Recurse -Force -Confirm:$false
 Get-ChildItem $output | Select-Object Name, Length
+if ($InMods) { & "$PSScriptRoot\update_mod_browser.ps1" }
