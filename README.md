@@ -1,6 +1,6 @@
 # Sin Spire Mod Loader
 
-[![Discord](https://img.shields.io/badge/Discord-Join%20the%20cult-5865F2?logo=discord&logoColor=white)](https://discord.gg/pjTY3jhbVz)
+<a href="https://discord.gg/pjTY3jhbVz"><img src=".github/discord-banner.png" alt="Join Scott's Modding Cult on Discord" width="640"></a>
 
 A one-click patch and a small framework for modding Sin Spire, with a set of preset mods. Put each mod in one `Mods` folder, tick the ones you want, and play.
 
