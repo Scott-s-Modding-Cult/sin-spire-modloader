@@ -20,7 +20,7 @@ namespace SinSpireModLoader
 
     static class Importer
     {
-        const string ListUrl = "https://api.github.com/repos/scottricity/sin-spire-modloader/contents/mods?ref=main";
+        const string ListUrl = "https://api.github.com/repos/Scott-s-Modding-Cult/sin-spire-modloader/contents/mods?ref=main";
 
         // Each player's own files, which an update keeps. Everything else in the old folder is replaced.
         static readonly string[] PersonalFiles = { "settings.txt", "monitor.txt", "monitors.txt", "helper.log", "mod-randomizer.json" };

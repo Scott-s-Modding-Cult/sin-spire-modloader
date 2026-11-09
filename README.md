@@ -24,7 +24,7 @@ These mods are adult content. `sync_mods.ps1` refreshes `mods\` from a game's `M
 
 `mods\` also holds a zip of each of these mods, to unpack straight into a game's `Mods` folder. `make_release_zips.ps1 -InMods` remakes them.
 
-The [mod browser](https://scottricity.github.io/sin-spire-modloader/mods/) reads `docs\mods\mods.json`. `update_mod_browser.ps1` fills in each mod's version, size, keys and requirements there, and both scripts above run it. Each mod's icon, category, summary and details are written by hand in that file. The script warns about any mod that is new or whose zip has changed, until its text has been checked and its `stamp` copied to `checked`.
+The [mod browser](https://scott-s-modding-cult.github.io/sin-spire-modloader/mods/) reads `docs\mods\mods.json`. `update_mod_browser.ps1` fills in each mod's version, size, keys and requirements there, and both scripts above run it. Each mod's icon, category, summary and details are written by hand in that file. The script warns about any mod that is new or whose zip has changed, until its text has been checked and its `stamp` copied to `checked`.
 
 The Mod Manager's **Get Mods** tab installs and updates mods from those zips. An update replaces the mod's folder and keeps your settings, and the old version is saved in `Mods\.modloader\backup`. A mod that came with the patch shows as Installed until it is updated once, because its age is not known until then.
 
@@ -137,11 +137,11 @@ The slider adds a saved row to the game's settings menu. Read `volume.value` to 
 
 ## Donating
 
-The loader and its preset mods are free. If you'd like to chip in, you can donate on the [donation page](https://scottricity.github.io/sin-spire-modloader/). Donations go to the loader's author, not to the developers of Sin Spire or the creators listed in the credits.
+The loader and its preset mods are free. If you'd like to chip in, you can donate on the [donation page](https://scott-s-modding-cult.github.io/sin-spire-modloader/). Donations go to the loader's author, not to the developers of Sin Spire or the creators listed in the credits.
 
 ## Mod downloads
 
-Some mods are also on the [Releases page](https://github.com/scottricity/sin-spire-modloader/releases) as zips. Backrooms is too big to keep unzipped in this repository, so it does not come with the patch, but `mods\Backrooms.zip` holds the latest version, and the Mod Manager's Get Mods tab installs it. With the patch installed, unzip one into the game's `Mods` folder and it appears in the Mod Manager. `make_release_zips.ps1` makes the zips.
+Some mods are also on the [Releases page](https://github.com/Scott-s-Modding-Cult/sin-spire-modloader/releases) as zips. Backrooms is too big to keep unzipped in this repository, so it does not come with the patch, but `mods\Backrooms.zip` holds the latest version, and the Mod Manager's Get Mods tab installs it. With the patch installed, unzip one into the game's `Mods` folder and it appears in the Mod Manager. `make_release_zips.ps1` makes the zips.
 
 ## Credits
 
