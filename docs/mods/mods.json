@@ -14,9 +14,15 @@
       "zip": "AdminPanel.zip",
       "bytes": 11097,
       "sha": "7158f3ca9c3d",
-      "keys": ["Esc"],
+      "keys": [
+        "Esc"
+      ],
       "requires": [],
-      "loadAfter": ["Plant Distractor", "Crab Pair", "Nurse Touch"],
+      "loadAfter": [
+        "Plant Distractor",
+        "Crab Pair",
+        "Nurse Touch"
+      ],
       "preset": true,
       "defaultOff": false,
       "alwaysOn": false
@@ -35,7 +41,9 @@
       "bytes": 3531,
       "sha": "3c682d8fd896",
       "keys": [],
-      "requires": ["ModKit"],
+      "requires": [
+        "ModKit"
+      ],
       "loadAfter": [],
       "preset": true,
       "defaultOff": false,
@@ -55,7 +63,9 @@
       "bytes": 77065835,
       "sha": "5c6048f58ba4",
       "keys": [],
-      "requires": ["ModKit"],
+      "requires": [
+        "ModKit"
+      ],
       "loadAfter": [],
       "preset": false,
       "defaultOff": false,
@@ -115,7 +125,9 @@
       "bytes": 12563992,
       "sha": "c4452dcaa0f8",
       "keys": [],
-      "requires": ["ModKit"],
+      "requires": [
+        "ModKit"
+      ],
       "loadAfter": [],
       "preset": true,
       "defaultOff": false,
@@ -134,9 +146,15 @@
       "zip": "CrabPair.zip",
       "bytes": 18389005,
       "sha": "3903aa9533f4",
-      "keys": ["F9"],
-      "requires": ["ModKit"],
-      "loadAfter": ["Plant Distractor"],
+      "keys": [
+        "F9"
+      ],
+      "requires": [
+        "ModKit"
+      ],
+      "loadAfter": [
+        "Plant Distractor"
+      ],
       "preset": true,
       "defaultOff": false,
       "alwaysOn": false
@@ -175,7 +193,9 @@
       "bytes": 644946,
       "sha": "676d9e1e32a9",
       "keys": [],
-      "requires": ["ModKit"],
+      "requires": [
+        "ModKit"
+      ],
       "loadAfter": [],
       "preset": true,
       "defaultOff": false,
@@ -220,26 +240,6 @@
       "preset": true,
       "defaultOff": false,
       "alwaysOn": true
-    },
-    {
-      "id": "ControllerDebug",
-      "title": "Controller Debug",
-      "icon": "🐞",
-      "category": "Tools",
-      "summary": "Testing build only: a log of controller input and what is on screen, for bug reports.",
-      "details": "Writes Mods\\ControllerDebug\\controller-debug.log, started fresh each launch. It records controller buttons as the game sees them and how long each was held, the keys the game's menus are handed, and a snapshot of the screen whenever it changes: which menus are open, whether the game is paused, the pause menu's page, highlighted button and settings row, which of them holds the focus, and the Admin Panel's page and highlighted item. Of the keyboard it only names navigation keys such as Esc, Enter and the arrows, so typed text is never written. Comes only with the controller testing patch, and can be turned off in the Mod Manager.",
-      "checked": "0.1.0",
-      "stamp": "0.1.0",
-      "version": "0.1.0",
-      "zip": null,
-      "bytes": null,
-      "sha": null,
-      "keys": [],
-      "requires": ["ModKit"],
-      "loadAfter": ["Admin Panel"],
-      "preset": true,
-      "defaultOff": false,
-      "alwaysOn": false
     }
   ]
 }
