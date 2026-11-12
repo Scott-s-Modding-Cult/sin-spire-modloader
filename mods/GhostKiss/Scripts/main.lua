@@ -2,7 +2,7 @@
 --
 -- A kissing pair shows the game's own sex prompt. Holding Interact (E) fills its bar like any of the game's prompts, and
 -- then, with enough lust, grabs both heads for a double blowjob scene that ends in a climax and purifies both. Pressing E
--- during that scene lets go early.
+-- during that scene lets go early, as does the controller's Interact button (X unless rebound).
 --
 -- A single Lost Soul gets a Neck scene in the game's own scene lists, beside its blowjob: one head taken by its neck and
 -- thrust through, out of its mouth. The game runs it like its own scenes, with stages, the climax bar and the end.
@@ -13,6 +13,8 @@
 
 local UEHelpers = require("UEHelpers")
 local AdminTabs = require("AdminTabs")
+-- An older ModKit has no Pad module, so then only E lets go.
+local has_pad, Pad = pcall(require, "Pad")
 
 local ANIM_PACKAGE = "/Game/Mods/GhostKiss/AS_LostSoul_Kiss"
 local ANIM_NAME = "AS_LostSoul_Kiss"
@@ -1357,6 +1359,7 @@ local function spawn_admin_pair(player)
 end
 
 local key_seen = false -- E reached the key callback since the last tick. Held, it does every frame.
+local pad_interact_keys = nil -- The controller buttons the game binds to Interact, read once.
 local key_quiet_ticks = 0
 local KEY_RELEASE_TICKS = 3 -- E unseen this many ticks counts as released.
 local admin_grab = nil -- The scene the admin panel asked for.
@@ -1439,6 +1442,15 @@ local function handle_requests(live)
     local player = current_player()
     if not player then
         return
+    end
+    -- UE4SS key binds only see the keyboard, so the controller's Interact is read here and counts the same as E.
+    if has_pad then
+        pad_interact_keys = pad_interact_keys or Pad.action_keys("Interact", { Pad.X })
+        for _, name in ipairs(pad_interact_keys) do
+            if Pad.down(name) then
+                key_seen = true
+            end
+        end
     end
     local fresh_press = key_seen and key_quiet_ticks >= KEY_RELEASE_TICKS
     key_quiet_ticks = key_seen and 0 or key_quiet_ticks + 1

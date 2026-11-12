@@ -5,10 +5,10 @@
         "NurseTouch"
     ],
     "title": "Admin Panel",
-    "description": "Cheat panel. The Admin Panel button in the pause menu opens it, Esc closes it.",
+    "description": "Cheat panel. The Admin Panel button in the pause menu opens it, Esc closes it. Works with a controller: A opens it, B backs out.",
     "keys": [
         "Esc"
     ],
-    "version": "1.0.0",
+    "version": "1.1.0",
     "preset": true
 }
