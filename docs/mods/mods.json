@@ -8,15 +8,21 @@
       "category": "Tools",
       "summary": "Cheat panel opened from a button in the pause menu.",
       "details": "Adds an Admin Panel button to the pause menu. The panel holds cheats and the settings for other mods, such as the Enemy Randomizer and a button to enter the Backrooms. Esc closes it. It also works with a controller: the pause menu's highlight reaches the button and A opens it, then the D-pad or left stick moves, left and right change a setting, A selects, B goes back and Start closes. The controller needs ModKit 1.1.0, from the newest patch, and has not yet been tried with a real controller.",
-      "checked": "1.1.0 91daca47c9c6",
-      "stamp": "1.1.0 91daca47c9c6",
+      "checked": "1.1.0 7158f3ca9c3d",
+      "stamp": "1.1.0 7158f3ca9c3d",
       "version": "1.1.0",
       "zip": "AdminPanel.zip",
-      "bytes": 10520,
-      "sha": "91daca47c9c6",
-      "keys": ["Esc"],
+      "bytes": 11097,
+      "sha": "7158f3ca9c3d",
+      "keys": [
+        "Esc"
+      ],
       "requires": [],
-      "loadAfter": ["Plant Distractor", "Crab Pair", "Nurse Touch"],
+      "loadAfter": [
+        "Plant Distractor",
+        "Crab Pair",
+        "Nurse Touch"
+      ],
       "preset": true,
       "defaultOff": false,
       "alwaysOn": false
@@ -35,7 +41,9 @@
       "bytes": 3531,
       "sha": "3c682d8fd896",
       "keys": [],
-      "requires": ["ModKit"],
+      "requires": [
+        "ModKit"
+      ],
       "loadAfter": [],
       "preset": true,
       "defaultOff": false,
@@ -55,7 +63,9 @@
       "bytes": 77065835,
       "sha": "5c6048f58ba4",
       "keys": [],
-      "requires": ["ModKit"],
+      "requires": [
+        "ModKit"
+      ],
       "loadAfter": [],
       "preset": false,
       "defaultOff": false,
@@ -115,7 +125,9 @@
       "bytes": 12563992,
       "sha": "c4452dcaa0f8",
       "keys": [],
-      "requires": ["ModKit"],
+      "requires": [
+        "ModKit"
+      ],
       "loadAfter": [],
       "preset": true,
       "defaultOff": false,
@@ -134,9 +146,15 @@
       "zip": "CrabPair.zip",
       "bytes": 18389005,
       "sha": "3903aa9533f4",
-      "keys": ["F9"],
-      "requires": ["ModKit"],
-      "loadAfter": ["Plant Distractor"],
+      "keys": [
+        "F9"
+      ],
+      "requires": [
+        "ModKit"
+      ],
+      "loadAfter": [
+        "Plant Distractor"
+      ],
       "preset": true,
       "defaultOff": false,
       "alwaysOn": false
@@ -175,7 +193,9 @@
       "bytes": 644946,
       "sha": "676d9e1e32a9",
       "keys": [],
-      "requires": ["ModKit"],
+      "requires": [
+        "ModKit"
+      ],
       "loadAfter": [],
       "preset": true,
       "defaultOff": false,

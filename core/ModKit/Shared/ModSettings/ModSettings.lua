@@ -23,9 +23,9 @@
 -- address and found again through the menu each time.
 --
 -- With a controller, the game's menu moves its highlight onto these rows like its own, but only its own rows answer
--- the calls it then makes. So when the highlight is on one of these rows, its slider takes the focus: left and right
--- on the pad move it, and every other button still reaches the menu. The menu gets the focus back when the highlight
--- moves on.
+-- the calls it then makes. So a highlighted row turns red here, and the menu's keys are read as it checks them: left
+-- and right on the D-pad step the row's slider. The menu keeps the focus throughout, as a focused slider would take
+-- the D-pad for the engine's own navigation and the menu's highlight could never leave it.
 
 local ModSettings = {}
 
@@ -37,6 +37,10 @@ local VALIGN_CENTER = 2
 local LABEL_FILL, SLIDER_FILL = 1.0, 1.0
 local TABS = { audio = "audio", video = "video" }
 local PAUSE_MENU_CLASS = "/Game/Blueprints/UI/Menu/BPW_PauseMenu.BPW_PauseMenu_C"
+-- Every key the pause menu gets goes through this comparison, with the key pressed first. UE4SS runs a hook on a
+-- blueprint function only after it has finished, so the key is the one the last comparison saw when OnKeyDown's runs.
+local KEY_COMPARE = "/Script/Engine.KismetInputLibrary:EqualEqual_KeyKey"
+local STEP_KEYS = { Gamepad_DPad_Left = -1, Gamepad_DPad_Right = 1 }
 local VISIBILITY_COLLAPSED, VISIBILITY_HIDDEN = 1, 2
 -- The game's own rows turn red while the controller is on them.
 local HIGHLIGHT_COLOR = { SpecifiedColor = { R = 1.0, G = 0.0, B = 0.0, A = 1.0 }, ColorUseRule = 0 }
@@ -47,6 +51,8 @@ local polling = false
 local next_poll_clock = 0.0
 local pad_hooks_registered = false
 local pad_errors = 0
+local menu_keys = {} -- One entry per OnKeyDown of the pause menu since the last game thread step.
+local last_compared_key = nil
 
 local function log(message)
     print("[ModSettings] " .. message .. "\n")
@@ -189,11 +195,6 @@ local function add_row(menu, setting)
     local label = new_widget("/Script/UMG.TextBlock")
     local slider = new_widget("/Script/UMG.Slider")
     local value = new_widget("/Script/UMG.TextBlock")
-    -- Otherwise the pad has to press A on the slider before left and right move it. It is read when the slider is
-    -- built, which happens when the row joins the menu below.
-    pcall(function()
-        slider.RequiresControllerLock = false
-    end)
     label:SetText(FText(setting.label))
     value:SetText(FText(value_text(setting)))
     layout_cell(row:AddChild(label), LABEL_FILL)
@@ -326,77 +327,114 @@ local function find_pause_menu(menu)
     return nil
 end
 
-local function update_pad_focus(menu)
+-- The highlighted row, if it is one of these and on screen, with everything needed to change it.
+local function highlighted_setting(menu, pause)
+    local target = pause.HighlightedSettingButton
+    if not pause:IsInViewport() or not valid(target) then
+        return nil
+    end
+    for _, setting in ipairs(sliders) do
+        if setting.menu_address == menu:GetAddress() and target:GetAddress() == setting.row_address then
+            local slider, _, row, label = find_row_parts(menu, setting)
+            if slider and is_shown(row) then
+                return setting, slider, label
+            end
+        end
+    end
+    return nil
+end
+
+-- Turns the highlighted row red, as the game's rows do, and every other row back.
+local function update_pad_highlight(menu)
     local pause = find_pause_menu(menu)
-    local controller = FindFirstOf("PlayerController")
-    if not pause or not valid(controller) then
+    if not pause then
         return
     end
-    local menu_up = pause:IsInViewport()
-    local target = pause.HighlightedSettingButton
-    local target_address = valid(target) and target:GetAddress() or nil
+    local current = highlighted_setting(menu, pause)
     for _, setting in ipairs(sliders) do
-        if setting.menu_address == menu:GetAddress() then
-            local slider, _, row, label = find_row_parts(menu, setting)
-            if slider then
-                if menu_up and target_address == setting.row_address and is_shown(row) then
-                    if not slider:HasUserFocus(controller) then
-                        slider:SetUserFocus(controller)
-                    end
-                    if not setting.pad_highlight then
-                        label:SetColorAndOpacity(HIGHLIGHT_COLOR)
-                        setting.pad_highlight = true
-                    end
-                else
-                    if setting.pad_highlight then
-                        label:SetColorAndOpacity(PLAIN_COLOR)
-                        setting.pad_highlight = false
-                    end
-                    if slider:HasUserFocus(controller) then
-                        -- Never leave the focus on a slider nobody can see, or it would keep the pad's left and right.
-                        if menu_up then
-                            pause:SetUserFocus(controller)
-                        else
-                            StaticFindObject("/Script/UMG.Default__WidgetBlueprintLibrary"):SetFocusToGameViewport()
-                        end
-                    end
-                end
+        local wanted = setting == current
+        if setting.menu_address == menu:GetAddress() and setting.pad_highlight ~= wanted then
+            local _, _, _, label = find_row_parts(menu, setting)
+            if label then
+                label:SetColorAndOpacity(wanted and HIGHLIGHT_COLOR or PLAIN_COLOR)
+                setting.pad_highlight = wanted
             end
         end
     end
 end
 
-local function pad_focus_now(known_menu)
-    local ok, problem = pcall(function()
-        local menu = known_menu or find_menu()
-        if menu then
-            update_pad_focus(menu)
-        end
-    end)
-    if not ok then
-        pad_errors = pad_errors + 1
-        if pad_errors <= 5 then
-            log("Controller focus problem: " .. tostring(problem))
-        end
+-- Left and right on the D-pad step the highlighted row. The value is picked up and saved by the next poll.
+local function on_menu_key(key)
+    local direction = STEP_KEYS[key]
+    if not direction then
+        return
+    end
+    local menu = find_menu()
+    local pause = menu and find_pause_menu(menu)
+    local setting, slider = nil, nil
+    if pause then
+        setting, slider = highlighted_setting(menu, pause)
+    end
+    if setting then
+        slider:SetValue(snap(setting, slider:GetValue() + direction * setting.step))
     end
 end
 
--- The menu moves its highlight while handling a button, so the focus follows on the next step of the game thread.
--- Polling alone would leave the old row with the focus for up to a tenth of a second.
+local function report_pad_error(problem)
+    pad_errors = pad_errors + 1
+    if pad_errors <= 5 then
+        log("Controller problem: " .. tostring(problem))
+    end
+end
+
+local function pad_highlight_now(known_menu)
+    local ok, problem = pcall(function()
+        local menu = known_menu or find_menu()
+        if menu then
+            update_pad_highlight(menu)
+        end
+    end)
+    if not ok then
+        report_pad_error(problem)
+    end
+end
+
+-- After the menu has handled its keys: each key acts on the row then highlighted, and the red follows the highlight.
+local function handle_menu_keys()
+    local keys = menu_keys
+    menu_keys = {}
+    for _, entry in ipairs(keys) do
+        if entry.key then
+            local ok, problem = pcall(on_menu_key, entry.key)
+            if not ok then
+                report_pad_error(problem)
+            end
+        end
+    end
+    pad_highlight_now(nil)
+end
+
 local function register_pad_hooks()
     if pad_hooks_registered then
         return
     end
     pad_hooks_registered = true
-    for _, name in ipairs({ "SettingButtonHighlight", "OnKeyDown" }) do
-        local ok, problem = pcall(RegisterHook, PAUSE_MENU_CLASS .. ":" .. name, function()
-            ExecuteInGameThread(function()
-                pad_focus_now(nil)
-            end)
+    local ok, problem = pcall(RegisterHook, KEY_COMPARE, function(_, first)
+        pcall(function()
+            last_compared_key = first:get().KeyName:ToString()
         end)
-        if not ok then
-            log("Could not follow the menu's " .. name .. ", so the controller waits for the next poll: " .. tostring(problem))
-        end
+    end)
+    if ok then
+        ok, problem = pcall(RegisterHook, PAUSE_MENU_CLASS .. ":OnKeyDown", function()
+            table.insert(menu_keys, { key = last_compared_key })
+            last_compared_key = nil
+            if #menu_keys == 1 then
+                ExecuteInGameThread(handle_menu_keys)
+            end
+        end)
+    end
+    if not ok then
+        log("Could not read the menu's keys, so the controller cannot move these sliders: " .. tostring(problem))
     end
 end
 
@@ -417,7 +455,10 @@ local function update_all()
     end
     if menu then
         register_pad_hooks()
-        pad_focus_now(menu)
+        if #menu_keys > 0 then
+            handle_menu_keys() -- In case a game thread step was missed.
+        end
+        pad_highlight_now(menu)
     end
 end
 
