@@ -75,7 +75,6 @@ end
 local pad_needs_reset = false
 local pad_error_cooldown = 0
 local focus_error_cooldown = 0
-local sync_pause_button_focus -- Set below, as closing the panel needs it.
 local pause_button = nil -- { menu_address, button_address }
 local speed_scale = { WalkSpeed = {}, SprintSpeed = {} }
 local accel_scale = {}
@@ -481,10 +480,6 @@ local function close_panel()
             -- Back to the pause menu, which keeps the game paused and the cursor showing.
             widget_library():SetInputMode_GameAndUIEx(controller, menu, INPUT_LOCK_NONE, false, false)
             menu:SetUserFocus(controller)
-            -- The menu's highlight is usually still on the panel's button, which then needs the focus for A.
-            if sync_pause_button_focus then
-                pcall(sync_pause_button_focus)
-            end
         else
             widget_library():SetInputMode_GameOnly(controller, true)
             controller.bShowMouseCursor = false
@@ -803,54 +798,59 @@ local function toggle_panel()
 end
 
 -- The pause menu works the controller itself: it moves a highlight over its buttons and, on A, calls the highlighted
--- one directly, which this mod cannot see. So while its highlight is on the panel's button, that button takes the
--- focus, and A presses it as a click would. Every other button passes through to the menu, which still moves its
--- highlight, and the focus goes back to the menu when the highlight leaves.
-sync_pause_button_focus = function()
-    if panel or not pause_button then
-        return
+-- one directly, which this mod cannot see. It keeps the focus, so it also keeps the D-pad: a focused button of this
+-- mod's would take the D-pad for the engine's own navigation, and the menu's highlight would never leave it. Instead
+-- the menu's keys are read as it checks them. Every key it gets goes through the engine's key comparison, and the
+-- first comparison after its OnKeyDown starts holds the key pressed.
+local KEY_COMPARE = "/Script/Engine.KismetInputLibrary:EqualEqual_KeyKey"
+local menu_keys = {} -- One entry per OnKeyDown of the pause menu since the last game thread step.
+local menu_key_logged = false
+
+local function pause_menu_for_button()
+    if not pause_button then
+        return nil
     end
-    local controller = current_controller()
-    if not controller then
-        return
-    end
-    local menu = nil
     for _, candidate in ipairs(FindAllOf(PAUSE_MENU_SHORT_CLASS) or {}) do
         if candidate:IsValid() and candidate:GetAddress() == pause_button.menu_address then
-            menu = candidate
+            return candidate
         end
     end
-    if not menu or not valid(menu.ResumeButt) then
+    return nil
+end
+
+-- A on the panel's button while the menu's highlight is on it opens the panel, as a click does.
+local function on_menu_key(key)
+    if key ~= "Gamepad_FaceButton_Bottom" or panel then
+        return
+    end
+    local menu = pause_menu_for_button()
+    if not menu or not menu:IsInViewport() or menu.HighlightedSocial or not valid(menu.ResumeButt) then
+        return
+    end
+    if not valid(menu.HighlightedButton) or menu.HighlightedButton:GetAddress() ~= pause_button.button_address then
         return
     end
     local parent = menu.ResumeButt:GetParent()
     local button = valid(parent) and item_widget(parent, { address = pause_button.button_address }) or nil
-    local inner = button and button.Button_14
-    if not valid(inner) then
-        return
-    end
-    local highlighted = valid(menu.HighlightedButton) and menu.HighlightedButton:GetAddress() == pause_button.button_address
-    local menu_up = menu:IsInViewport()
-    if highlighted and menu_up and is_shown(button) then
-        if not inner:HasUserFocus(controller) then
-            inner:SetUserFocus(controller)
-        end
-    elseif inner:HasUserFocus(controller) then
-        -- Never leave the focus on a button nobody can see, or it would keep taking A.
-        if menu_up then
-            menu:SetUserFocus(controller)
-        else
-            widget_library():SetFocusToGameViewport()
-        end
+    if button and is_shown(button) then
+        toggle_panel()
     end
 end
 
-local function sync_pause_button_focus_safely()
-    local ok, message = pcall(sync_pause_button_focus)
-    if not ok then
-        if focus_error_cooldown <= 0 then
-            log("Controller focus error: " .. tostring(message))
-            focus_error_cooldown = LOOPS_UNTIL_ERROR_IS_REPEATED
+local function handle_menu_keys()
+    local keys = menu_keys
+    menu_keys = {}
+    for _, entry in ipairs(keys) do
+        if entry.key then
+            if not menu_key_logged then
+                menu_key_logged = true
+                log("Reading the pause menu's keys, first " .. entry.key)
+            end
+            local ok, message = pcall(on_menu_key, entry.key)
+            if not ok and focus_error_cooldown <= 0 then
+                log("Controller error: " .. tostring(message))
+                focus_error_cooldown = LOOPS_UNTIL_ERROR_IS_REPEATED
+            end
         end
     end
 end
@@ -869,15 +869,24 @@ local function register_button_hook()
             ExecuteInGameThread(panel.button_actions[address])
         end
     end)
-    -- The menu moves its highlight while it handles a button, so the focus follows on the next game thread step. The
-    -- tick checks it too, in case these hooks do not take.
-    for _, name in ipairs({ "GamepadHighlightButton", "OnKeyDown" }) do
-        local ok, problem = pcall(RegisterHook, PAUSE_MENU_CLASS .. ":" .. name, function()
-            ExecuteInGameThread(sync_pause_button_focus_safely)
-        end)
-        if not ok then
-            log("Could not follow the pause menu's " .. name .. ": " .. tostring(problem))
+    local ok, problem = pcall(RegisterHook, PAUSE_MENU_CLASS .. ":OnKeyDown", function()
+        table.insert(menu_keys, { key = nil })
+        if #menu_keys == 1 then
+            ExecuteInGameThread(handle_menu_keys)
         end
+    end)
+    if ok then
+        ok, problem = pcall(RegisterHook, KEY_COMPARE, function(_, first)
+            local entry = menu_keys[#menu_keys]
+            if entry and not entry.key then
+                pcall(function()
+                    entry.key = first:get().KeyName:ToString()
+                end)
+            end
+        end)
+    end
+    if not ok then
+        log("Could not read the pause menu's keys, so A on its button needs the mouse: " .. tostring(problem))
     end
 end
 
@@ -962,9 +971,11 @@ local function update_panel()
 end
 
 local function tick()
+    if #menu_keys > 0 then
+        handle_menu_keys() -- In case a game thread step was missed.
+    end
     update_pause_button()
     update_panel()
-    sync_pause_button_focus_safely()
     send_cum_yaw()
     apply_cheats()
 end
