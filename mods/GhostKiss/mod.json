@@ -1,6 +1,9 @@
 {
     "title": "Ghost Kiss",
-    "description": "LostSoul kiss.",
-    "version": "1.0.0",
+    "description": "LostSoul kiss. Hold Interact on a kissing pair for both heads; a lone Lost Soul gets a Neck scene in the game's own scene lists.",
+    "requires": [
+        "ModKit"
+    ],
+    "version": "1.3.0",
     "preset": true
 }
