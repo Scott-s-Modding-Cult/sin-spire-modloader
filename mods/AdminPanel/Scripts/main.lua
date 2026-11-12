@@ -591,15 +591,9 @@ local function build_panel(controller, page)
     end
     add_action("Close", close_panel)
 
+    -- The panel is left unable to take the focus: a focused widget turns the D-pad into the engine's own navigation
+    -- and keeps it, so the D-pad would never reach the game for the Pad module to read.
     tree.RootWidget = root
-    -- The panel must hold the focus, or the pause menu beneath it would keep the controller's buttons. SetIsFocusable
-    -- does nothing in this game, so the flag is set directly.
-    pcall(function()
-        host.bIsFocusable = true
-    end)
-    pcall(function()
-        host:SetIsFocusable(true)
-    end)
     return host, result
 end
 
@@ -675,6 +669,18 @@ local function step_row(box, item, delta)
 end
 
 -- The panel takes no keys itself, so the controller's buttons reach the engine, where the Pad module reads them.
+-- While the panel is open the game's viewport keeps the focus, so every controller button reaches the game, where the
+-- Pad module reads it. A mouse click can hand the focus to one of the panel's buttons, or to the pause menu behind it,
+-- and either would then keep the D-pad, so the focus is taken back.
+local function keep_viewport_focus(controller, host)
+    local menu = open_pause_menu()
+    local taken = (host and (host:HasUserFocus(controller) or host:HasFocusedDescendants()))
+        or (menu and (menu:HasUserFocus(controller) or menu:HasFocusedDescendants()))
+    if taken then
+        widget_library():SetFocusToGameViewport()
+    end
+end
+
 local function pad_tick()
     if not panel or not pad then
         return
@@ -683,6 +689,7 @@ local function pad_tick()
     if not controller then
         return
     end
+    keep_viewport_focus(controller, find_host())
     if pad_needs_reset then
         -- A button held when the panel opened, such as the A that opened it, is not a new press.
         pad:reset(controller)
@@ -741,10 +748,12 @@ local function pad_tick()
 end
 
 -- Game and UI input, as the game's own pause menu uses, rather than UI only: under UI only the engine never sees the
--- controller's buttons. Input to the player and controller stays off and the game stays paused, so nothing reaches it.
+-- controller's buttons. The focus goes to the game's viewport, not the panel or the pause menu behind it, as either of
+-- those would keep the D-pad. Input to the player and controller stays off and the game stays paused, so nothing
+-- reaches it.
 local function focus_panel(controller, host)
     widget_library():SetInputMode_GameAndUIEx(controller, host, INPUT_LOCK_NONE, false, false)
-    host:SetUserFocus(controller)
+    widget_library():SetFocusToGameViewport()
 end
 
 local function open_panel()
