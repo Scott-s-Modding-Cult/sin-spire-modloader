@@ -8,12 +8,12 @@
       "category": "Tools",
       "summary": "Cheat panel opened from a button in the pause menu.",
       "details": "Adds an Admin Panel button to the pause menu. The panel holds cheats and the settings for other mods, such as the Enemy Randomizer and a button to enter the Backrooms. Esc closes it. It also works with a controller: the pause menu's highlight reaches the button and A opens it, then the D-pad or left stick moves, left and right change a setting, A selects, B goes back and Start closes. The controller needs ModKit 1.1.0, from the newest patch, and has not yet been tried with a real controller.",
-      "checked": "1.1.0 81680626fe40",
-      "stamp": "1.1.0 81680626fe40",
+      "checked": "1.1.0 7158f3ca9c3d",
+      "stamp": "1.1.0 7158f3ca9c3d",
       "version": "1.1.0",
       "zip": "AdminPanel.zip",
-      "bytes": 10906,
-      "sha": "81680626fe40",
+      "bytes": 11097,
+      "sha": "7158f3ca9c3d",
       "keys": ["Esc"],
       "requires": [],
       "loadAfter": ["Plant Distractor", "Crab Pair", "Nurse Touch"],
@@ -220,6 +220,26 @@
       "preset": true,
       "defaultOff": false,
       "alwaysOn": true
+    },
+    {
+      "id": "ControllerDebug",
+      "title": "Controller Debug",
+      "icon": "🐞",
+      "category": "Tools",
+      "summary": "Testing build only: a log of controller input and what is on screen, for bug reports.",
+      "details": "Writes Mods\\ControllerDebug\\controller-debug.log, started fresh each launch. It records controller buttons as the game sees them and how long each was held, the keys the game's menus are handed, and a snapshot of the screen whenever it changes: which menus are open, whether the game is paused, the pause menu's page, highlighted button and settings row, which of them holds the focus, and the Admin Panel's page and highlighted item. Of the keyboard it only names navigation keys such as Esc, Enter and the arrows, so typed text is never written. Comes only with the controller testing patch, and can be turned off in the Mod Manager.",
+      "checked": "0.1.0",
+      "stamp": "0.1.0",
+      "version": "0.1.0",
+      "zip": null,
+      "bytes": null,
+      "sha": null,
+      "keys": [],
+      "requires": ["ModKit"],
+      "loadAfter": ["Admin Panel"],
+      "preset": true,
+      "defaultOff": false,
+      "alwaysOn": false
     }
   ]
 }

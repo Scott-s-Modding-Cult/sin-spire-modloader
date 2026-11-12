@@ -561,11 +561,11 @@ local function build_panel(controller, page)
     local function add_action(label, action)
         local address = add_button(box, controller, label)
         result.button_actions[address] = action
-        table.insert(result.items, { address = address })
+        table.insert(result.items, { address = address, label = label })
     end
     for index, row in ipairs(result.rows) do
         result.row_addresses[index] = add_row(box, controller, row)
-        table.insert(result.items, { address = result.row_addresses[index], row = index })
+        table.insert(result.items, { address = result.row_addresses[index], row = index, label = row.label })
     end
     if page then
         for index, label in ipairs(page.labels) do
@@ -979,7 +979,23 @@ local function update_panel()
     end
 end
 
+-- The panel's state for the Controller Debug mod of the testing build, sent only when it changes.
+local debug_state_sent = nil
+local function publish_debug_state()
+    local state = "closed"
+    if panel then
+        local item = panel.cursor and panel.items[panel.cursor]
+        state = string.format("open, page=%s, highlighted=%s, controller used=%s",
+            panel.page and panel.page.title or "main", item and item.label or "none", tostring(panel.pad_used == true))
+    end
+    if state ~= debug_state_sent then
+        ModRef:SetSharedVariable("AdminPanel_DebugState", state)
+        debug_state_sent = state
+    end
+end
+
 local function tick()
+    publish_debug_state()
     if #menu_keys > 0 then
         handle_menu_keys() -- In case a game thread step was missed.
     end
