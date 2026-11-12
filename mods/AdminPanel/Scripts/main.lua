@@ -809,10 +809,12 @@ end
 -- The pause menu works the controller itself: it moves a highlight over its buttons and, on A, calls the highlighted
 -- one directly, which this mod cannot see. It keeps the focus, so it also keeps the D-pad: a focused button of this
 -- mod's would take the D-pad for the engine's own navigation, and the menu's highlight would never leave it. Instead
--- the menu's keys are read as it checks them. Every key it gets goes through the engine's key comparison, and the
--- first comparison after its OnKeyDown starts holds the key pressed.
+-- the menu's keys are read as it checks them. Every key it gets goes through the engine's key comparison, with the
+-- key pressed first. UE4SS runs a hook on a blueprint function only after the function has finished, so the key is
+-- the one the last comparison saw when the menu's OnKeyDown hook runs.
 local KEY_COMPARE = "/Script/Engine.KismetInputLibrary:EqualEqual_KeyKey"
 local menu_keys = {} -- One entry per OnKeyDown of the pause menu since the last game thread step.
+local last_compared_key = nil
 local menu_key_logged = false
 
 local function pause_menu_for_button()
@@ -878,19 +880,17 @@ local function register_button_hook()
             ExecuteInGameThread(panel.button_actions[address])
         end
     end)
-    local ok, problem = pcall(RegisterHook, PAUSE_MENU_CLASS .. ":OnKeyDown", function()
-        table.insert(menu_keys, { key = nil })
-        if #menu_keys == 1 then
-            ExecuteInGameThread(handle_menu_keys)
-        end
+    local ok, problem = pcall(RegisterHook, KEY_COMPARE, function(_, first)
+        pcall(function()
+            last_compared_key = first:get().KeyName:ToString()
+        end)
     end)
     if ok then
-        ok, problem = pcall(RegisterHook, KEY_COMPARE, function(_, first)
-            local entry = menu_keys[#menu_keys]
-            if entry and not entry.key then
-                pcall(function()
-                    entry.key = first:get().KeyName:ToString()
-                end)
+        ok, problem = pcall(RegisterHook, PAUSE_MENU_CLASS .. ":OnKeyDown", function()
+            table.insert(menu_keys, { key = last_compared_key })
+            last_compared_key = nil
+            if #menu_keys == 1 then
+                ExecuteInGameThread(handle_menu_keys)
             end
         end)
     end

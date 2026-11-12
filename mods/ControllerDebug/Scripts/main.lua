@@ -250,11 +250,12 @@ local function snapshot()
     return table.concat(parts, "  ")
 end
 
--- Keys the game's menus are handed. Every one goes through the engine's key comparison, and the first comparison
--- after the pause menu's OnKeyDown starts holds the key it was given.
+-- Keys the game's menus are handed. Every one goes through the engine's key comparison, with the key pressed first.
+-- UE4SS runs a hook on a blueprint function only after it has finished, so when the pause menu's OnKeyDown hook runs,
+-- the last comparison holds the key it was given.
 local menu_events = {} -- Written out on the next loop, as the hooks run in the middle of the game's own code.
-local in_pause_key = nil
 local last_compared, last_compared_clock = nil, 0
+local pause_key = nil -- The last key compared, for the pause menu's OnKeyDown hook.
 
 local function hook_key_compare()
     local ok, problem = pcall(RegisterHook, KEY_COMPARE, function(_, first)
@@ -264,12 +265,10 @@ local function hook_key_compare()
         if not ok_name then
             return
         end
-        if in_pause_key then
-            in_pause_key = nil
-            table.insert(menu_events, "pause menu was handed " .. safe_key_name(name))
-        elseif name ~= last_compared or os.clock() - last_compared_clock > 0.05 then
-            table.insert(menu_events, "a game menu checked " .. safe_key_name(name))
+        if name ~= last_compared or os.clock() - last_compared_clock > 0.05 then
+            table.insert(menu_events, { name = name, text = "a game menu checked " .. safe_key_name(name) })
         end
+        pause_key = name
         last_compared, last_compared_clock = name, os.clock()
     end)
     write("Key comparison hook: " .. (ok and "on" or ("failed: " .. tostring(problem))))
@@ -282,7 +281,16 @@ local function hook_pause_menu()
     end
     pause_hooked = true
     local ok, problem = pcall(RegisterHook, PAUSE_MENU_CLASS .. ":OnKeyDown", function()
-        in_pause_key = true
+        -- The comparison just logged for this key was the pause menu's, so it is relabelled.
+        local last = menu_events[#menu_events]
+        if last and pause_key and last.name == pause_key then
+            last.text = "pause menu was handed " .. safe_key_name(pause_key)
+        elseif pause_key then
+            table.insert(menu_events, { name = pause_key, text = "pause menu was handed " .. safe_key_name(pause_key) })
+        else
+            table.insert(menu_events, { text = "pause menu got a key it never checked" })
+        end
+        pause_key = nil
     end)
     write("Pause menu key hook: " .. (ok and "on" or ("failed: " .. tostring(problem))))
 end
@@ -342,8 +350,8 @@ mod.loop(LOOP_MS, function()
     if #menu_events > 0 then
         local events = menu_events
         menu_events = {}
-        for _, text in ipairs(events) do
-            write(text)
+        for _, event in ipairs(events) do
+            write(event.text)
         end
         key_event = true
     end

@@ -37,7 +37,8 @@ local VALIGN_CENTER = 2
 local LABEL_FILL, SLIDER_FILL = 1.0, 1.0
 local TABS = { audio = "audio", video = "video" }
 local PAUSE_MENU_CLASS = "/Game/Blueprints/UI/Menu/BPW_PauseMenu.BPW_PauseMenu_C"
--- Every key the pause menu gets goes through this comparison, and the first one after its OnKeyDown starts holds it.
+-- Every key the pause menu gets goes through this comparison, with the key pressed first. UE4SS runs a hook on a
+-- blueprint function only after it has finished, so the key is the one the last comparison saw when OnKeyDown's runs.
 local KEY_COMPARE = "/Script/Engine.KismetInputLibrary:EqualEqual_KeyKey"
 local STEP_KEYS = { Gamepad_DPad_Left = -1, Gamepad_DPad_Right = 1 }
 local VISIBILITY_COLLAPSED, VISIBILITY_HIDDEN = 1, 2
@@ -51,6 +52,7 @@ local next_poll_clock = 0.0
 local pad_hooks_registered = false
 local pad_errors = 0
 local menu_keys = {} -- One entry per OnKeyDown of the pause menu since the last game thread step.
+local last_compared_key = nil
 
 local function log(message)
     print("[ModSettings] " .. message .. "\n")
@@ -417,19 +419,17 @@ local function register_pad_hooks()
         return
     end
     pad_hooks_registered = true
-    local ok, problem = pcall(RegisterHook, PAUSE_MENU_CLASS .. ":OnKeyDown", function()
-        table.insert(menu_keys, { key = nil })
-        if #menu_keys == 1 then
-            ExecuteInGameThread(handle_menu_keys)
-        end
+    local ok, problem = pcall(RegisterHook, KEY_COMPARE, function(_, first)
+        pcall(function()
+            last_compared_key = first:get().KeyName:ToString()
+        end)
     end)
     if ok then
-        ok, problem = pcall(RegisterHook, KEY_COMPARE, function(_, first)
-            local entry = menu_keys[#menu_keys]
-            if entry and not entry.key then
-                pcall(function()
-                    entry.key = first:get().KeyName:ToString()
-                end)
+        ok, problem = pcall(RegisterHook, PAUSE_MENU_CLASS .. ":OnKeyDown", function()
+            table.insert(menu_keys, { key = last_compared_key })
+            last_compared_key = nil
+            if #menu_keys == 1 then
+                ExecuteInGameThread(handle_menu_keys)
             end
         end)
     end
