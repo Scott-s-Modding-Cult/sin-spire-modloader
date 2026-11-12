@@ -1,6 +1,6 @@
 {
     "title": "ModKit",
-    "version": "1.1.0",
-    "description": "Shared code for other mods: logging, safe loops and keys, messages between mods, settings menu sliders, and controller buttons.",
+    "version": "1.0.0",
+    "description": "Shared code for other mods: logging, safe loops and keys, messages between mods, and settings menu sliders.",
     "always_on": true
 }

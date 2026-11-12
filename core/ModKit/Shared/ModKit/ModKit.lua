@@ -10,10 +10,6 @@
 --   mod.slider({ key = "Volume", label = "My Volume", tab = "audio", min = 0, max = 100, step = 5, default = 50 })
 --   ModKit.is_loaded("OtherMod")              -- Whether the mod loader started that mod this launch.
 --
--- Key binds only see the keyboard. For the controller, the Pad module beside this one reads the game's own key state:
---   local Pad = require("Pad")
---   Pad.down(Pad.A)                           -- Whether a controller button is held. Pad.Reader tracks presses.
---
 -- Add "requires": ["ModKit"] to the mod's mod.json so it loads after this library is in place.
 
 local ModKit = {}

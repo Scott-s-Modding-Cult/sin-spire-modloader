@@ -21,11 +21,6 @@
 --
 -- The game can delete and reuse any object, so nothing here keeps a widget between ticks. Rows are remembered by
 -- address and found again through the menu each time.
---
--- With a controller, the game's menu moves its highlight onto these rows like its own, but only its own rows answer
--- the calls it then makes. So when the highlight is on one of these rows, its slider takes the focus: left and right
--- on the pad move it, and every other button still reaches the menu. The menu gets the focus back when the highlight
--- moves on.
 
 local ModSettings = {}
 
@@ -36,17 +31,10 @@ local SIZE_RULE_FILL = 1
 local VALIGN_CENTER = 2
 local LABEL_FILL, SLIDER_FILL = 1.0, 1.0
 local TABS = { audio = "audio", video = "video" }
-local PAUSE_MENU_CLASS = "/Game/Blueprints/UI/Menu/BPW_PauseMenu.BPW_PauseMenu_C"
-local VISIBILITY_COLLAPSED, VISIBILITY_HIDDEN = 1, 2
--- The game's own rows turn red while the controller is on them.
-local HIGHLIGHT_COLOR = { SpecifiedColor = { R = 1.0, G = 0.0, B = 0.0, A = 1.0 }, ColorUseRule = 0 }
-local PLAIN_COLOR = { SpecifiedColor = { R = 1.0, G = 1.0, B = 1.0, A = 1.0 }, ColorUseRule = 0 }
 
 local sliders = {}
 local polling = false
 local next_poll_clock = 0.0
-local pad_hooks_registered = false
-local pad_errors = 0
 
 local function log(message)
     print("[ModSettings] " .. message .. "\n")
@@ -189,11 +177,6 @@ local function add_row(menu, setting)
     local label = new_widget("/Script/UMG.TextBlock")
     local slider = new_widget("/Script/UMG.Slider")
     local value = new_widget("/Script/UMG.TextBlock")
-    -- Otherwise the pad has to press A on the slider before left and right move it. It is read when the slider is
-    -- built, which happens when the row joins the menu below.
-    pcall(function()
-        slider.RequiresControllerLock = false
-    end)
     label:SetText(FText(setting.label))
     value:SetText(FText(value_text(setting)))
     layout_cell(row:AddChild(label), LABEL_FILL)
@@ -210,12 +193,11 @@ local function add_row(menu, setting)
     slider:SetValue(setting.value)
     setting.menu_address = menu:GetAddress()
     setting.row_address = row:GetAddress()
-    setting.pad_highlight = false
     log("Added " .. setting.label .. " at " .. value_text(setting))
     return true
 end
 
--- The row's slider, value text, the row itself and its label, found again through the menu, or nil if any are gone.
+-- The row and its parts, found again through the menu, or nil if any of them are gone.
 local function find_row_parts(menu, setting)
     local template = find_template(menu, setting.tab)
     if not template then
@@ -228,9 +210,9 @@ local function find_row_parts(menu, setting)
     for index = panel:GetChildrenCount() - 1, 0, -1 do
         local child = panel:GetChildAt(index)
         if child:IsValid() and child:GetAddress() == setting.row_address then
-            local label, slider, value = child:GetChildAt(0), child:GetChildAt(1), child:GetChildAt(2)
-            if slider:IsValid() and value:IsValid() and label:IsValid() then
-                return slider, value, child, label
+            local slider, value = child:GetChildAt(1), child:GetChildAt(2)
+            if slider:IsValid() and value:IsValid() then
+                return slider, value
             end
             return nil
         end
@@ -270,136 +252,6 @@ local function save_settled(setting)
     end
 end
 
-local function valid(object)
-    return object ~= nil and object:IsValid()
-end
-
--- Whether the widget is on screen: nothing above it hidden, and on the shown page of every switcher it sits in. The
--- menu keeps its other tabs and pages built, so being in the menu is not enough.
-local function is_shown(widget)
-    local user_widget = StaticFindObject("/Script/UMG.UserWidget")
-    local current = widget
-    for _ = 1, 64 do
-        if not valid(current) then
-            return false
-        end
-        local visibility = current:GetVisibility()
-        if visibility == VISIBILITY_COLLAPSED or visibility == VISIBILITY_HIDDEN then
-            return false
-        end
-        local parent = current:GetParent()
-        if valid(parent) then
-            if parent:GetClass():GetFName():ToString() == "WidgetSwitcher" then
-                local active = parent:GetActiveWidget()
-                if not valid(active) or active:GetAddress() ~= current:GetAddress() then
-                    return false
-                end
-            end
-            current = parent
-        else
-            -- The top of one widget's own tree: carry on from the widget it belongs to, until one on the screen itself.
-            local tree = current:GetOuter()
-            local owner = valid(tree) and tree:GetOuter() or nil
-            if not valid(owner) or not owner:IsA(user_widget) then
-                return true
-            end
-            if owner:IsInViewport() then
-                visibility = owner:GetVisibility()
-                return visibility ~= VISIBILITY_COLLAPSED and visibility ~= VISIBILITY_HIDDEN
-            end
-            current = owner
-        end
-    end
-    return false
-end
-
--- The pause menu, or the main menu's, that this settings menu is part of.
-local function find_pause_menu(menu)
-    for _, pause in ipairs(FindAllOf("BPW_PauseMenu_C") or {}) do
-        if pause:IsValid() and pause:GetFullName():find("/Engine/Transient", 1, true) then
-            local inner = pause.BPW_SettingsMenu
-            if valid(inner) and inner:GetAddress() == menu:GetAddress() then
-                return pause
-            end
-        end
-    end
-    return nil
-end
-
-local function update_pad_focus(menu)
-    local pause = find_pause_menu(menu)
-    local controller = FindFirstOf("PlayerController")
-    if not pause or not valid(controller) then
-        return
-    end
-    local menu_up = pause:IsInViewport()
-    local target = pause.HighlightedSettingButton
-    local target_address = valid(target) and target:GetAddress() or nil
-    for _, setting in ipairs(sliders) do
-        if setting.menu_address == menu:GetAddress() then
-            local slider, _, row, label = find_row_parts(menu, setting)
-            if slider then
-                if menu_up and target_address == setting.row_address and is_shown(row) then
-                    if not slider:HasUserFocus(controller) then
-                        slider:SetUserFocus(controller)
-                    end
-                    if not setting.pad_highlight then
-                        label:SetColorAndOpacity(HIGHLIGHT_COLOR)
-                        setting.pad_highlight = true
-                    end
-                else
-                    if setting.pad_highlight then
-                        label:SetColorAndOpacity(PLAIN_COLOR)
-                        setting.pad_highlight = false
-                    end
-                    if slider:HasUserFocus(controller) then
-                        -- Never leave the focus on a slider nobody can see, or it would keep the pad's left and right.
-                        if menu_up then
-                            pause:SetUserFocus(controller)
-                        else
-                            StaticFindObject("/Script/UMG.Default__WidgetBlueprintLibrary"):SetFocusToGameViewport()
-                        end
-                    end
-                end
-            end
-        end
-    end
-end
-
-local function pad_focus_now(known_menu)
-    local ok, problem = pcall(function()
-        local menu = known_menu or find_menu()
-        if menu then
-            update_pad_focus(menu)
-        end
-    end)
-    if not ok then
-        pad_errors = pad_errors + 1
-        if pad_errors <= 5 then
-            log("Controller focus problem: " .. tostring(problem))
-        end
-    end
-end
-
--- The menu moves its highlight while handling a button, so the focus follows on the next step of the game thread.
--- Polling alone would leave the old row with the focus for up to a tenth of a second.
-local function register_pad_hooks()
-    if pad_hooks_registered then
-        return
-    end
-    pad_hooks_registered = true
-    for _, name in ipairs({ "SettingButtonHighlight", "OnKeyDown" }) do
-        local ok, problem = pcall(RegisterHook, PAUSE_MENU_CLASS .. ":" .. name, function()
-            ExecuteInGameThread(function()
-                pad_focus_now(nil)
-            end)
-        end)
-        if not ok then
-            log("Could not follow the menu's " .. name .. ", so the controller waits for the next poll: " .. tostring(problem))
-        end
-    end
-end
-
 local function update_all()
     local menu = find_menu()
     for _, setting in ipairs(sliders) do
@@ -414,10 +266,6 @@ local function update_all()
             setting.menu_address = nil
         end
         save_settled(setting)
-    end
-    if menu then
-        register_pad_hooks()
-        pad_focus_now(menu)
     end
 end
 
