@@ -131,7 +131,25 @@ local volume = mod.slider({ key = "Volume", label = "My Volume", tab = "audio", 
 require("ModSettings").StartPolling()     -- Unless the mod already calls ModSettings.Poll() from its own tick.
 ```
 
-The slider adds a saved row to the game's settings menu. Read `volume.value` to get its value.
+The slider adds a saved row to the game's settings menu. Read `volume.value` to get its value. The game's controller navigation reaches the row like its own: it turns red, and left and right on the pad move the slider.
+
+### Controller
+
+UE4SS key binds only see the keyboard. The `Pad` module reads controller buttons from the game's own key state instead:
+
+```lua
+local Pad = require("Pad")
+
+Pad.down(Pad.A)                                -- Whether a button is held right now.
+local reader = Pad.Reader({ Pad.UP, Pad.A })   -- Remembers presses between updates.
+reader:update()                                -- From a game-thread loop, every 20 to 30 ms for menus.
+reader:pressed(Pad.A)                          -- Went down since the last update.
+reader:repeated(Pad.UP)                        -- Pressed, or held long enough to repeat as menus do.
+Pad.using_gamepad()                            -- Whether the game last saw a controller rather than mouse and keys.
+Pad.action_keys("Interact", { Pad.X })         -- The controller buttons the game binds to one of its actions.
+```
+
+The game's own menus handle the controller themselves, so their buttons read as up here while one of them has focus. The game already uses every button in play, so a mod action is best put on an Admin Panel tab, which works with the controller, rather than on a button of its own.
 
 ## Testing
 

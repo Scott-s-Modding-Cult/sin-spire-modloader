@@ -1,21 +1,34 @@
 -- Admin panel. A button in the pause menu opens and closes it, and its Close button and Esc also close it. While it is
 -- open the player and controller get no input, so nothing typed or clicked in the panel reaches the game.
 --
+-- With a controller, the pause menu's own highlight reaches the button and A opens the panel. In the panel the D-pad
+-- or left stick moves a highlight, left and right change a row, A presses, B goes back a page or closes, and Start
+-- closes. ModKit's Pad module reads the controller; without it the panel still works with the mouse.
+--
 -- The panel reuses the game's settings rows and menu buttons, hosted in a menu button whose contents are
 -- replaced. Nothing here keeps a game object between ticks: the game can delete any object and reuse its
 -- memory, and calling a deleted object crashes it. See GhostKiss for how that was found.
 
 -- Other mods add pages of their own buttons with ModKit's AdminTabs, so nothing breaks if an older ModKit lacks it.
 local has_tabs, AdminTabs = pcall(require, "AdminTabs")
+-- An older ModKit has no Pad module, so the panel then works without the controller.
+local has_pad, Pad = pcall(require, "Pad")
 
 local SPINNER_CLASS = "/Game/Blueprints/UI/Menu/Settings/BPW_SettingsSpinner.BPW_SettingsSpinner_C"
 local BUTTON_CLASS = "/Game/Blueprints/UI/Menu/BPW_GenericMenuButton.BPW_GenericMenuButton_C"
 local BUTTON_SHORT_CLASS = "BPW_GenericMenuButton_C"
+local PAUSE_MENU_CLASS = "/Game/Blueprints/UI/Menu/BPW_PauseMenu.BPW_PauseMenu_C"
 local PAUSE_MENU_SHORT_CLASS = "BPW_PauseMenu_C"
 local PAUSE_BUTTON_LABEL = "Admin Panel"
 local BUTTON_PRESSED_HOOK = BUTTON_CLASS
     .. ":BndEvt__BPW_GenericMenuButton_Button_14_K2Node_ComponentBoundEvent_0_OnButtonPressedEvent__DelegateSignature"
-local TICK_MS = 50
+local LOOP_MS = 25 -- Often enough to catch a quick tap on the controller.
+local LOOPS_PER_TICK = 2 -- Everything else runs every 50 ms, as before.
+local FIRST_ROW_CHILD = 2 -- In the panel's list the title comes first, then the controller hint, then the rows.
+local PAD_HINT = "D-pad or stick: move     Left / Right: change     A: select     B: back"
+local HINT_FONT_SIZE = 16
+local VISIBILITY_COLLAPSED, VISIBILITY_HIDDEN, VISIBILITY_HIT_TEST_INVISIBLE = 1, 2, 3
+local SCROLL_INTO_VIEW = 0
 local SETTLE_TICKS = 6 -- A new row can reset itself while it builds, so its choice is reapplied for a moment.
 local ESCAPE_CLOSE_DELAY_MS = 200 -- The game must have seen Esc go down first, or it would open the pause menu.
 local PANEL_WIDTH = 900.0
@@ -52,8 +65,17 @@ local rows = {
     { key = "cum_yaw", label = "Futa Nurse Cum Yaw", options = CUM_YAW_LABELS, index = CUM_YAW_DEFAULT // CUM_YAW_STEP },
 }
 
-local panel = nil -- { address, row_addresses, button_actions, settle }
+local panel = nil -- { address, page, rows, row_addresses, button_actions, items, settle, cursor, pad_used }
 local hook_registered = false
+local pad = nil -- Reads the controller while the panel is open.
+if has_pad then
+    pad = Pad.Reader({ Pad.UP, Pad.DOWN, Pad.LEFT, Pad.RIGHT, Pad.STICK_UP, Pad.STICK_DOWN, Pad.STICK_LEFT,
+        Pad.STICK_RIGHT, Pad.A, Pad.B, Pad.MENU })
+end
+local pad_needs_reset = false
+local pad_error_cooldown = 0
+local focus_error_cooldown = 0
+local sync_pause_button_focus -- Set below, as closing the panel needs it.
 local pause_button = nil -- { menu_address, button_address }
 local speed_scale = { WalkSpeed = {}, SprintSpeed = {} }
 local accel_scale = {}
@@ -103,6 +125,45 @@ end
 
 local function valid(object)
     return object ~= nil and object:IsValid()
+end
+
+-- Whether the widget is on screen: nothing above it hidden, and on the shown page of every switcher it sits in. The
+-- pause menu keeps its other pages built, so being in the menu is not enough.
+local function is_shown(widget)
+    local user_widget = StaticFindObject("/Script/UMG.UserWidget")
+    local current = widget
+    for _ = 1, 64 do
+        if not valid(current) then
+            return false
+        end
+        local visibility = current:GetVisibility()
+        if visibility == VISIBILITY_COLLAPSED or visibility == VISIBILITY_HIDDEN then
+            return false
+        end
+        local parent = current:GetParent()
+        if valid(parent) then
+            if parent:GetClass():GetFName():ToString() == "WidgetSwitcher" then
+                local active = parent:GetActiveWidget()
+                if not valid(active) or active:GetAddress() ~= current:GetAddress() then
+                    return false
+                end
+            end
+            current = parent
+        else
+            -- The top of one widget's own tree: carry on from the widget it belongs to, until one on the screen itself.
+            local tree = current:GetOuter()
+            local owner = valid(tree) and tree:GetOuter() or nil
+            if not valid(owner) or not owner:IsA(user_widget) then
+                return true
+            end
+            if owner:IsInViewport() then
+                visibility = owner:GetVisibility()
+                return visibility ~= VISIBILITY_COLLAPSED and visibility ~= VISIBILITY_HIDDEN
+            end
+            current = owner
+        end
+    end
+    return false
 end
 
 local function row_value(key)
@@ -365,6 +426,17 @@ local function find_rows_box(host)
     return nil
 end
 
+-- A row or button of the panel, by the address it was made with.
+local function item_widget(box, item)
+    for index = 0, box:GetChildrenCount() - 1 do
+        local child = box:GetChildAt(index)
+        if valid(child) and child:GetAddress() == item.address then
+            return child
+        end
+    end
+    return nil
+end
+
 local function find_host()
     if not panel then
         return nil
@@ -409,6 +481,10 @@ local function close_panel()
             -- Back to the pause menu, which keeps the game paused and the cursor showing.
             widget_library():SetInputMode_GameAndUIEx(controller, menu, INPUT_LOCK_NONE, false, false)
             menu:SetUserFocus(controller)
+            -- The menu's highlight is usually still on the panel's button, which then needs the focus for A.
+            if sync_pause_button_focus then
+                pcall(sync_pause_button_focus)
+            end
         else
             widget_library():SetInputMode_GameOnly(controller, true)
             controller.bShowMouseCursor = false
@@ -457,6 +533,16 @@ local function build_panel(controller, page)
     size:SetMaxDesiredHeight(PANEL_MAX_HEIGHT)
     title:SetText(FText(page and page.title or "Admin Panel"))
     title:SetColorAndOpacity({ SpecifiedColor = { R = 0.75, G = 0.0, B = 0.0, A = 1.0 }, ColorUseRule = 0 })
+    -- Shown once the controller is in use, so mouse players do not see it.
+    local hint = new_widget("/Script/UMG.TextBlock", tree)
+    hint:SetText(FText(PAD_HINT))
+    hint:SetColorAndOpacity({ SpecifiedColor = { R = 0.6, G = 0.6, B = 0.6, A = 1.0 }, ColorUseRule = 0 })
+    pcall(function()
+        local font = hint.Font
+        font.Size = HINT_FONT_SIZE
+        hint:SetFont(font)
+    end)
+    hint:SetVisibility(VISIBILITY_COLLAPSED)
 
     local slot = root:AddChild(background)
     slot:SetAnchors({ Minimum = { X = 0.5, Y = 0.5 }, Maximum = { X = 0.5, Y = 0.5 } })
@@ -466,6 +552,7 @@ local function build_panel(controller, page)
     size:AddChild(scroll)
     scroll:AddChild(box)
     box:AddChild(title)
+    box:AddChild(hint)
 
     local result = {
         address = host:GetAddress(),
@@ -473,40 +560,196 @@ local function build_panel(controller, page)
         rows = page and page_rows(page) or rows,
         row_addresses = {},
         button_actions = {},
+        items = {}, -- Rows and buttons in the order the controller's highlight moves through them.
         settle = SETTLE_TICKS,
     }
+    local function add_action(label, action)
+        local address = add_button(box, controller, label)
+        result.button_actions[address] = action
+        table.insert(result.items, { address = address })
+    end
     for index, row in ipairs(result.rows) do
         result.row_addresses[index] = add_row(box, controller, row)
+        table.insert(result.items, { address = result.row_addresses[index], row = index })
     end
     if page then
         for index, label in ipairs(page.labels) do
-            result.button_actions[add_button(box, controller, label)] = function()
+            add_action(label, function()
                 AdminTabs.Press(page.id, index)
                 log(page.title .. ": " .. label)
-            end
+            end)
         end
-        result.button_actions[add_button(box, controller, "Back")] = function()
+        add_action("Back", function()
             show_page(nil)
-        end
+        end)
     else
-        result.button_actions[add_button(box, controller, "Full Heal")] = full_heal
-        result.button_actions[add_button(box, controller, "Add " .. MONEY_STEP .. " Money")] = add_money
-        result.button_actions[add_button(box, controller, "Kill All Enemies")] = kill_enemies
-        result.button_actions[add_button(box, controller, "Spawn Random Plant Pair")] = spawn_plant_pair
-        result.button_actions[add_button(box, controller, "Enter the Backrooms")] = enter_backrooms
+        add_action("Full Heal", full_heal)
+        add_action("Add " .. MONEY_STEP .. " Money", add_money)
+        add_action("Kill All Enemies", kill_enemies)
+        add_action("Spawn Random Plant Pair", spawn_plant_pair)
+        add_action("Enter the Backrooms", enter_backrooms)
         for _, tab in ipairs(mod_tabs()) do
-            result.button_actions[add_button(box, controller, tab.title)] = function()
+            add_action(tab.title, function()
                 show_page(tab)
-            end
+            end)
         end
     end
-    result.button_actions[add_button(box, controller, "Close")] = close_panel
+    add_action("Close", close_panel)
 
     tree.RootWidget = root
+    -- The panel must hold the focus, or the pause menu beneath it would keep the controller's buttons. SetIsFocusable
+    -- does nothing in this game, so the flag is set directly.
+    pcall(function()
+        host.bIsFocusable = true
+    end)
     pcall(function()
         host:SetIsFocusable(true)
     end)
     return host, result
+end
+
+-- The controller's highlight. The rows and buttons are the game's own, so they light up the way its menus do.
+local function set_item_highlight(box, item, on)
+    local widget = item and item_widget(box, item)
+    if widget then
+        pcall(function()
+            if on then
+                widget:Highlight()
+            else
+                widget:Unhighlight()
+            end
+        end)
+    end
+    return widget
+end
+
+local function move_cursor(box, to)
+    local count = #panel.items
+    if count == 0 then
+        return
+    end
+    to = ((to - 1) % count) + 1
+    if panel.cursor and panel.cursor ~= to then
+        set_item_highlight(box, panel.items[panel.cursor], false)
+    end
+    panel.cursor = to
+    local widget = set_item_highlight(box, panel.items[to], true)
+    if widget then
+        pcall(function()
+            box:GetParent():ScrollWidgetIntoView(widget, true, SCROLL_INTO_VIEW, 0.0)
+        end)
+    end
+end
+
+-- Starts the controller's highlight on the first row and shows the hint, once the controller is in use.
+local function start_pad_cursor(host)
+    local box = find_rows_box(host)
+    if not box or not panel then
+        return
+    end
+    panel.pad_used = true
+    local hint = box:GetChildAt(1)
+    if valid(hint) then
+        hint:SetVisibility(VISIBILITY_HIT_TEST_INVISIBLE)
+    end
+    if not panel.cursor then
+        move_cursor(box, 1)
+    end
+end
+
+-- Changes a row the way its arrows do, going round at the ends.
+local function step_row(box, item, delta)
+    local row = panel.rows[item.row]
+    local widget = item_widget(box, item)
+    if not row or not widget then
+        return
+    end
+    local spinner = widget.Spinner
+    local count = #row.options
+    -- Selecting past the end of the list crashes the game, so only a row whose list is in place is changed.
+    if count == 0 or #spinner.Options ~= count then
+        return
+    end
+    local chosen = (row.index + delta) % count
+    spinner:SelectIndex(chosen)
+    row.index = chosen
+    if row.on_change then
+        row.on_change(chosen)
+    end
+    log(row.label .. ": " .. row.options[chosen + 1])
+end
+
+-- The panel takes no keys itself, so the controller's buttons reach the engine, where the Pad module reads them.
+local function pad_tick()
+    if not panel or not pad then
+        return
+    end
+    local controller = current_controller()
+    if not controller then
+        return
+    end
+    if pad_needs_reset then
+        -- A button held when the panel opened, such as the A that opened it, is not a new press.
+        pad:reset(controller)
+        pad_needs_reset = false
+        return
+    end
+    if not pad:update(controller) then
+        return
+    end
+    local host = find_host()
+    local box = host and find_rows_box(host)
+    if not box then
+        return
+    end
+    if not panel.pad_used then
+        start_pad_cursor(host)
+        return -- The first press only shows where the highlight is.
+    end
+    if pad:pressed(Pad.MENU) then
+        close_panel()
+        return
+    end
+    if pad:pressed(Pad.B) then
+        if panel.page then
+            show_page(nil)
+        else
+            close_panel()
+        end
+        return
+    end
+    local up = pad:repeated(Pad.UP) or pad:repeated(Pad.STICK_UP)
+    local down = pad:repeated(Pad.DOWN) or pad:repeated(Pad.STICK_DOWN)
+    local left = pad:repeated(Pad.LEFT) or pad:repeated(Pad.STICK_LEFT)
+    local right = pad:repeated(Pad.RIGHT) or pad:repeated(Pad.STICK_RIGHT)
+    if up then
+        move_cursor(box, (panel.cursor or 1) - 1)
+    elseif down then
+        move_cursor(box, (panel.cursor or 0) + 1)
+    end
+    local item = panel.cursor and panel.items[panel.cursor]
+    if not item then
+        return
+    end
+    if item.row then
+        if left then
+            step_row(box, item, -1)
+        elseif right or pad:pressed(Pad.A) then
+            step_row(box, item, 1)
+        end
+    elseif pad:pressed(Pad.A) then
+        local action = panel.button_actions[item.address]
+        if action then
+            action()
+        end
+    end
+end
+
+-- Game and UI input, as the game's own pause menu uses, rather than UI only: under UI only the engine never sees the
+-- controller's buttons. Input to the player and controller stays off and the game stays paused, so nothing reaches it.
+local function focus_panel(controller, host)
+    widget_library():SetInputMode_GameAndUIEx(controller, host, INPUT_LOCK_NONE, false, false)
+    host:SetUserFocus(controller)
 end
 
 local function open_panel()
@@ -521,8 +764,12 @@ local function open_panel()
     panel = built
     controller:DisableInput(controller)
     player:DisableInput(controller)
-    widget_library():SetInputMode_UIOnlyEx(controller, host, INPUT_LOCK_NONE, true)
+    focus_panel(controller, host)
     controller.bShowMouseCursor = true
+    pad_needs_reset = true
+    if pad and Pad.using_gamepad(controller) then
+        start_pad_cursor(host)
+    end
     log("Opened")
 end
 
@@ -532,6 +779,7 @@ show_page = function(page)
     if not panel or not controller then
         return
     end
+    local pad_used = panel.pad_used
     local old = find_host()
     local host, built = build_panel(controller, page)
     host:AddToViewport(50)
@@ -539,7 +787,10 @@ show_page = function(page)
     if old then
         old:RemoveFromParent()
     end
-    widget_library():SetInputMode_UIOnlyEx(controller, host, INPUT_LOCK_NONE, true)
+    focus_panel(controller, host)
+    if pad_used then
+        start_pad_cursor(host)
+    end
     log("Showing " .. (page and page.title or "the main page"))
 end
 
@@ -548,6 +799,59 @@ local function toggle_panel()
         close_panel()
     else
         open_panel()
+    end
+end
+
+-- The pause menu works the controller itself: it moves a highlight over its buttons and, on A, calls the highlighted
+-- one directly, which this mod cannot see. So while its highlight is on the panel's button, that button takes the
+-- focus, and A presses it as a click would. Every other button passes through to the menu, which still moves its
+-- highlight, and the focus goes back to the menu when the highlight leaves.
+sync_pause_button_focus = function()
+    if panel or not pause_button then
+        return
+    end
+    local controller = current_controller()
+    if not controller then
+        return
+    end
+    local menu = nil
+    for _, candidate in ipairs(FindAllOf(PAUSE_MENU_SHORT_CLASS) or {}) do
+        if candidate:IsValid() and candidate:GetAddress() == pause_button.menu_address then
+            menu = candidate
+        end
+    end
+    if not menu or not valid(menu.ResumeButt) then
+        return
+    end
+    local parent = menu.ResumeButt:GetParent()
+    local button = valid(parent) and item_widget(parent, { address = pause_button.button_address }) or nil
+    local inner = button and button.Button_14
+    if not valid(inner) then
+        return
+    end
+    local highlighted = valid(menu.HighlightedButton) and menu.HighlightedButton:GetAddress() == pause_button.button_address
+    local menu_up = menu:IsInViewport()
+    if highlighted and menu_up and is_shown(button) then
+        if not inner:HasUserFocus(controller) then
+            inner:SetUserFocus(controller)
+        end
+    elseif inner:HasUserFocus(controller) then
+        -- Never leave the focus on a button nobody can see, or it would keep taking A.
+        if menu_up then
+            menu:SetUserFocus(controller)
+        else
+            widget_library():SetFocusToGameViewport()
+        end
+    end
+end
+
+local function sync_pause_button_focus_safely()
+    local ok, message = pcall(sync_pause_button_focus)
+    if not ok then
+        if focus_error_cooldown <= 0 then
+            log("Controller focus error: " .. tostring(message))
+            focus_error_cooldown = LOOPS_UNTIL_ERROR_IS_REPEATED
+        end
     end
 end
 
@@ -565,6 +869,16 @@ local function register_button_hook()
             ExecuteInGameThread(panel.button_actions[address])
         end
     end)
+    -- The menu moves its highlight while it handles a button, so the focus follows on the next game thread step. The
+    -- tick checks it too, in case these hooks do not take.
+    for _, name in ipairs({ "GamepadHighlightButton", "OnKeyDown" }) do
+        local ok, problem = pcall(RegisterHook, PAUSE_MENU_CLASS .. ":" .. name, function()
+            ExecuteInGameThread(sync_pause_button_focus_safely)
+        end)
+        if not ok then
+            log("Could not follow the pause menu's " .. name .. ": " .. tostring(problem))
+        end
+    end
 end
 
 -- The controller makes one pause menu per level and shows and hides it, so the button goes in once per menu.
@@ -612,9 +926,9 @@ local function update_panel()
         close_panel()
         return
     end
-    -- The title is the first child, then the rows in order.
+    -- The title and the controller hint come first, then the rows in order.
     for index, row in ipairs(panel.rows) do
-        local widget = box:GetChildAt(index)
+        local widget = box:GetChildAt(index + FIRST_ROW_CHILD - 1)
         if not valid(widget) or widget:GetAddress() ~= panel.row_addresses[index] then
             log("Row is gone")
             close_panel()
@@ -650,6 +964,7 @@ end
 local function tick()
     update_pause_button()
     update_panel()
+    sync_pause_button_focus_safely()
     send_cum_yaw()
     apply_cheats()
 end
@@ -660,7 +975,22 @@ RegisterKeyBind(Key.ESCAPE, function()
     end
 end)
 
-loop_in_game_thread(TICK_MS, function()
+local loop_count = 0
+loop_in_game_thread(LOOP_MS, function()
+    -- The controller is read every loop while the panel is open, and the rest every LOOPS_PER_TICK loops.
+    local pad_ok, pad_problem = pcall(pad_tick)
+    if not pad_ok then
+        if pad_error_cooldown <= 0 then
+            log("Controller error: " .. tostring(pad_problem))
+            pad_error_cooldown = LOOPS_UNTIL_ERROR_IS_REPEATED * LOOPS_PER_TICK
+        end
+        pad_error_cooldown = pad_error_cooldown - 1
+    end
+    loop_count = loop_count + 1
+    if loop_count % LOOPS_PER_TICK ~= 0 then
+        return
+    end
+    focus_error_cooldown = focus_error_cooldown - 1
     local ok, message = pcall(tick)
     if ok then
         return
@@ -673,4 +1003,8 @@ loop_in_game_thread(TICK_MS, function()
     error_cooldown = error_cooldown - 1
 end)
 
-log("Loaded, the pause menu opens the panel")
+if has_pad then
+    log("Loaded, the pause menu opens the panel, with the mouse or the controller")
+else
+    log("Loaded, the pause menu opens the panel. No Pad module in ModKit, so the panel has no controller support")
+end

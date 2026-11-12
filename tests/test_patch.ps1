@@ -87,7 +87,8 @@ Check "requires reorders" ([array]::IndexOf($txt, "Base : 1") -lt [array]::Index
 Check "disabled by default" (-not ($txt -match "Orphan"))
 $log = Get-Content "$fake\Mods\.modloader\modloader.log" -Raw
 Check "key clash logged" ($log -match "F2 key is used by Base and NeedsIt")
-Check "ModKit in loaded list" ((Get-Content "$fake\Mods\.modloader\loaded.txt") -match "^ModKit=1.0.0")
+$modKitVersion = (Get-Content "$PSScriptRoot\..\core\ModKit\mod.json" -Raw | ConvertFrom-Json).version
+Check "ModKit in loaded list" ((Get-Content "$fake\Mods\.modloader\loaded.txt") -match "^ModKit=$([regex]::Escape($modKitVersion))$")
 
 # --- Turning a mod off takes it away, and a pak stops being linked.
 (Get-Content "$fake\Mods\modlist.txt") -replace "^\+OldOn$", "-OldOn" -replace "^\+Loose$", "-Loose" | Set-Content "$fake\Mods\modlist.txt"
