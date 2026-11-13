@@ -129,11 +129,28 @@ local function player_location()
     return { X = 0, Y = 0, Z = 0 }
 end
 
+-- Crawling Arm's arms are Lost Souls with the arm's body: not ghosts to pair up, kiss or take by the neck.
+local function is_crawling_arm(ghost)
+    -- Every object is checked before its name is read: reading the name of an empty one crashes the game.
+    local ok, name = pcall(function()
+        local mesh = ghost.Mesh
+        if not (mesh and mesh:IsValid()) then
+            return nil
+        end
+        local asset = mesh:GetSkeletalMeshAsset()
+        if not (asset and asset:IsValid()) then
+            return nil
+        end
+        return asset:GetFName():ToString()
+    end)
+    return ok and name == "SK_FloatingArm"
+end
+
 -- Every live ghost right now, by address. Only objects from this list are safe to call during this tick.
 local function live_ghosts()
     local live = {}
     for _, ghost in ipairs(FindAllOf(GHOST_CLASS) or {}) do
-        if ghost:IsValid() then
+        if ghost:IsValid() and not is_crawling_arm(ghost) then
             live[ghost:GetAddress()] = ghost
         end
     end
