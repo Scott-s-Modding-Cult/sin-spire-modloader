@@ -4,7 +4,7 @@
 
 A one-click patch and a small framework for modding Sin Spire, with a set of preset mods. Put each mod in one `Mods` folder, tick the ones you want, and play.
 
-**You need your own copy of Sin Spire.** This repository does not include the game. Nurse Touch's pak does include one mesh cut from the game's player model, as `CREDITS.txt` notes.
+**You need your own copy of Sin Spire.** This repository does not include the game. Gooner DLC's pak (from the Get Mods tab) does include one mesh cut from the game's player model, as `CREDITS.txt` notes.
 
 ## Preset mods
 
@@ -19,7 +19,6 @@ The mods in `mods\` come with the patch and appear in the Mod Manager, where eac
 | Enemy Randomizer | Any regular enemy can appear at any dungeon spawn. Set it up in the admin panel or `mod-randomizer.json`, which is read at launch | |
 | Ghost Kiss | LostSoul kiss | |
 | Monitor Setting | Adds a Monitor row to the video settings | |
-| Nurse Touch | Twisted Nurse variation | |
 | Plant Distractor | Plant pair distraction placed in each level, with a volume slider | |
 
 These mods are adult content. `sync_mods.ps1` refreshes `mods\` from a game's `Mods` folder. It leaves out personal settings.
