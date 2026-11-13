@@ -241,7 +241,13 @@ local function begin_pair(front, back, front_entry)
     front:SetActorEnableCollision(true)
     local back_entry = hold_still(back)
     local centre = front.Mesh:K2_GetComponentLocation()
+    -- The pair turns to face the player when it starts, so the groping is seen from the front, not the back.
     local yaw = random_between(-180.0, 180.0)
+    local player = current_player()
+    if player then
+        local at = player:K2_GetActorLocation()
+        yaw = math.deg(math.atan(at.Y - centre.Y, at.X - centre.X))
+    end
     place(front, centre, yaw)
     place(back, centre, yaw)
     local front_address, back_address = front:GetAddress(), back:GetAddress()
