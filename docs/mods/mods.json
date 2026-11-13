@@ -220,6 +220,26 @@
       "preset": true,
       "defaultOff": false,
       "alwaysOn": true
+    },
+    {
+      "id": "GoonerDLC",
+      "title": "Gooner DLC",
+      "icon": "💉",
+      "category": "Scenes",
+      "summary": "Twisted Nurse variations, 74 extra pair animations, 33 new player scenes, Freecam and a Free Mode scene picker, in one mod.",
+      "details": "Some Twisted Nurses are found touching themselves until woken, some are futa, and some appear in pairs: groping, snuggling, from behind, riding, kissing, the Banshee's Behind and Carry scenes, or one of 74 extra pair animations. The player gets Kiss From Behind and 33 new scenes with the Twisted, Twisted Nurse and Witness: a 50% chance in dungeons, set in the Admin Panel, and always in their Free Mode scene lists. In any sex scene, the Perspective key (middle mouse, or the right stick click) now goes first person, third person, then Freecam: fly with WASD and the mouse or the sticks, Space/Ctrl or RB/LB for up and down, Shift or LT faster; the next press puts the camera back. In a Free Mode scene list, Tab (Y on a controller) opens a list of every scene to click straight to one, shown by a Tab prompt above Next Stage. It contains Nurse Touch, so don't run the separate Nurse Touch mod as well. Also gives other mods the AnimationsPlus animation library. The extra animations are retargeted from the OLL Animations (AP) pack for WickedWhims. Not included with the patch; get it from the Get Mods tab.",
+      "checked": "1.3.3 66cafde71268",
+      "stamp": "1.3.3 66cafde71268",
+      "version": "1.3.3",
+      "zip": "GoonerDLC.zip",
+      "bytes": 24808644,
+      "sha": "66cafde71268",
+      "keys": [],
+      "requires": ["ModKit"],
+      "loadAfter": [],
+      "preset": false,
+      "defaultOff": false,
+      "alwaysOn": false
     }
   ]
 }
