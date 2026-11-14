@@ -6,9 +6,18 @@ A one-click patch and a small framework for modding Sin Spire, with a set of pre
 
 **You need your own copy of Sin Spire.** This repository does not include the game. Gooner DLC's pak (from the Get Mods tab) does include one mesh cut from the game's player model, as `CREDITS.txt` notes.
 
-## Download
+## Download and install
 
-**[Download the Sin Spire Mod Manager](https://github.com/Scott-s-Modding-Cult/sin-spire-modloader/releases/latest/download/SinSpire-ModManager.exe)** (`SinSpire-ModManager.exe`). It is the only thing you need: open it, and its **Mod Loader** tab installs the mod loader in your game, with UE4SS and the preset mods. From then on the same Mod Manager turns mods on and off, gets new ones (**Get Mods**), and updates itself and the loader. You only download it once. It can add itself to the Start menu, and holding Shift while starting the game, or `Mod Manager.bat` in the game folder, opens it too.
+👉 **[Download SinSpire-ModManager.exe](https://github.com/Scott-s-Modding-Cult/sin-spire-modloader/releases/latest/download/SinSpire-ModManager.exe)**: the only file you need.
+
+1. Close Sin Spire.
+2. Open **SinSpire-ModManager.exe**. If Windows warns you about it, click **More info**, then **Run anyway**.
+3. On the **Mod Loader** tab, check that it found your Sin Spire folder, then click **Install Mod Loader**.
+4. Play Sin Spire from Steam as usual.
+
+To turn mods on or off or get new ones, open the Mod Manager again: from the Start menu, the file you downloaded, or by holding **Shift** while starting the game. It tells you when a new version is out; click **Update**. **Remove Mod Loader** on the same tab uninstalls it and keeps your mods. Your saves are never touched.
+
+The rest of this page is for mod makers and for building the Mod Manager yourself.
 
 ## Preset mods
 
