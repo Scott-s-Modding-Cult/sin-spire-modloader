@@ -31,18 +31,13 @@ Headcrab model by Likkez, https://twitter.com/likkezg, http://likkezg.com/
   Changes: re-posed and animated, with a darker material on one crab.
   Licence terms not yet confirmed.
 
-Long thick tongue, from the teeth and tongue mesh pack by BaloonyBoi
-  Used in: Creeper Pair
-  Changes: re-rigged and animated.
-  Licence terms not yet confirmed.
-
 OLL Animations (AP), an animation pack for WickedWhims (The Sims 4), by its creator
   Used in: Gooner DLC (from the Get Mods tab or the Releases page)
   Changes: two-person floor, standing and Kamasutra animations retargeted to the game's characters.
   Licence terms not yet confirmed.
 
 saliva_strings_v2.0.blend, author not yet identified
-  Used in: Creeper Pair, Plant Distractor
+  Used in: Plant Distractor
   Changes: strands baked and re-rigged.
   Licence terms not yet confirmed.
 

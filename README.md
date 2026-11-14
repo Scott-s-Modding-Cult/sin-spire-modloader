@@ -17,9 +17,7 @@ The mods in `mods\` come with the patch and appear in the Mod Manager, where eac
 | Mod | What it does | Keys |
 | --- | --- | --- |
 | Admin Panel | Cheat panel, opened from a button in the pause menu | Esc |
-| Body Visible | First-person body with walk, idle and crouch clips | |
 | Crab Pair | Headcrab pair distraction. Silent without Plant Distractor, whose sounds it uses | F9 |
-| Creeper Pair | Creeper pair distraction for TutorialCave and Free Mode. Off by default | |
 | Enemy Randomizer | Any regular enemy can appear at any dungeon spawn. Set it up in the admin panel or `mod-randomizer.json`, which is read at launch | |
 | Ghost Kiss | LostSoul kiss | |
 | Monitor Setting | Adds a Monitor row to the video settings | |

@@ -62,26 +62,6 @@
       "alwaysOn": false
     },
     {
-      "id": "BodyVisible",
-      "title": "Body Visible",
-      "icon": "🧍",
-      "category": "Visual",
-      "summary": "See your own body in first person.",
-      "details": "Shows the player's body when looking down, with walk, idle and crouch animations. Always on while the mod is enabled.",
-      "checked": "1.0.0 eb5b73bc0912",
-      "stamp": "1.0.0 eb5b73bc0912",
-      "version": "1.0.0",
-      "zip": "BodyVisible.zip",
-      "bytes": 19588,
-      "sha": "eb5b73bc0912",
-      "keys": [],
-      "requires": [],
-      "loadAfter": [],
-      "preset": true,
-      "defaultOff": false,
-      "alwaysOn": false
-    },
-    {
       "id": "MonitorSetting",
       "title": "Monitor Setting",
       "icon": "🖥️",
@@ -139,26 +119,6 @@
       "loadAfter": ["Plant Distractor"],
       "preset": true,
       "defaultOff": false,
-      "alwaysOn": false
-    },
-    {
-      "id": "CreeperPair",
-      "title": "Creeper Pair",
-      "icon": "👅",
-      "category": "Scenes",
-      "summary": "Creeper pair distraction for TutorialCave and Free Mode.",
-      "details": "A pair of Creepers kissing and scissoring in TutorialCave and Free Mode. Turned off by default; tick it in the Mod Manager to use it.",
-      "checked": "1.0.0 87c3963fc5af",
-      "stamp": "1.0.0 87c3963fc5af",
-      "version": "1.0.0",
-      "zip": "CreeperPair.zip",
-      "bytes": 1535920,
-      "sha": "87c3963fc5af",
-      "keys": [],
-      "requires": [],
-      "loadAfter": [],
-      "preset": true,
-      "defaultOff": true,
       "alwaysOn": false
     },
     {

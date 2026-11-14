@@ -4,7 +4,7 @@
 # whose folder is too big for this repository but whose zip is not, and the mod browser's data in docs\mods\mods.json is
 # refreshed. Run sync_mods.ps1 first.
 param(
-    [string[]]$Mods = @("AdminPanel", "Backrooms", "BodyVisible", "MonitorSetting"),
+    [string[]]$Mods = @("AdminPanel", "Backrooms", "MonitorSetting"),
     [string]$GameDir = (Split-Path (Split-Path $PSScriptRoot)),
     [switch]$InMods
 )

@@ -28,6 +28,11 @@ Set-Content "$scratch\fake.cs" $source
 $originalHash = (Get-FileHash "$fake\SinSpire.exe").Hash
 Set-Content "$win64\SinSpire-Win64-Shipping.exe" "fake"
 
+# A mod that asks to start off.
+New-Item -ItemType Directory -Force "$fake\Mods\OffByDefault\Scripts" | Out-Null
+Set-Content "$fake\Mods\OffByDefault\mod.json" '{ "title": "Off By Default", "version": "1.0.0", "enabled_by_default": false }'
+Set-Content "$fake\Mods\OffByDefault\Scripts\main.lua" "-- off"
+
 # --- A folder with no UE4SS gets it from the patch, and a pak dropped in by hand is adopted.
 Set-Content "$fake\SinSpire\Content\Paks\~mods\SinSpire-Loose_P.pak" "pak"
 Set-Content "$fake\SinSpire\Content\Paks\~mods\SinSpire-Loose_P.utoc" "toc"
@@ -41,7 +46,8 @@ Check "preset installed" (Test-Path "$fake\Mods\AdminPanel\Scripts\main.lua")
 Check "credits installed" (Test-Path "$fake\Mods\CREDITS.txt")
 Check "preset pak linked" (Test-Path "$fake\SinSpire\Content\Paks\~mods\SinSpire-CrabPair_P.pak")
 Check "preset on by default is running" ((Get-Content "$win64\ue4ss\Mods\mods.txt") -contains "AdminPanel : 1")
-Check "preset off by default is listed but off" ((Test-Path "$fake\Mods\CreeperPair\mod.json") -and -not (Test-Path "$win64\ue4ss\Mods\CreeperPair"))
+Check "mod off by default is listed but off" ((Test-Path "$fake\Mods\OffByDefault\mod.json") -and -not (Test-Path "$win64\ue4ss\Mods\OffByDefault"))
+Check "removed presets not shipped" (-not (Test-Path "$fake\Mods\CreeperPair") -and -not (Test-Path "$fake\Mods\BodyVisible"))
 Check "no personal settings in presets" (-not (Get-ChildItem "$fake\Mods" -Recurse -File -Include settings.txt, monitor.txt, monitors.txt, helper.log))
 Set-Content "$fake\Mods\AdminPanel\Scripts\main.lua" "-- edited by the player"
 Set-Content "$fake\Mods\CrabPair\settings.txt" "keep=1"
