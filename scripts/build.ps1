@@ -72,8 +72,6 @@ if ($iconSource) {
     $iconArgument = @("/win32icon:$build\icon.ico")
 }
 
-& $csc /nologo /target:winexe /platform:x64 /optimize+ "/out:$build\launcher.exe" @iconArgument @references "$here\src\Core.cs" "$here\src\Importer.cs" "$here\src\Updater.cs" "$here\src\Launcher.cs"
-if ($LASTEXITCODE -ne 0) { throw "Launcher did not compile" }
 
 [IO.Compression.ZipFile]::CreateFromDirectory("$here\core", "$build\modkit.zip")
 # The preset mods are not in the patch: it installs them from the zips in mods\ that docs\mods\mods.json lists.
@@ -105,6 +103,10 @@ Keybinds : 1
 Set-Content "$build\version.txt" $Tag -Encoding ascii -NoNewline
 "Release tag: $Tag"
 
-& $csc /nologo /target:winexe /platform:x64 /optimize+ "/out:$dist\SinSpire-ModLoader-Patch.exe" @iconArgument @references "/resource:$build\launcher.exe,launcher.exe" "/resource:$build\ue4ss.zip,ue4ss.zip" "/resource:$build\modkit.zip,modkit.zip" "/resource:$here\CREDITS.txt,CREDITS.txt" "/resource:$build\version.txt,version.txt" "$here\src\Core.cs" "$here\src\GameSearch.cs" "$here\src\Importer.cs" "$here\src\Updater.cs" "$here\src\Patcher.cs"
-if ($LASTEXITCODE -ne 0) { throw "Patch did not compile" }
-Get-Item "$dist\SinSpire-ModLoader-Patch.exe" | Select-Object Name, Length
+# One program: the Mod Manager app, the game's launcher (as SinSpire.exe) and the installer. The release also carries it
+# under the patch's old name, which loaders up to patch-2026.11.14 and the Multiplayer Hub setup download.
+$sources = "App.cs", "Core.cs", "GameSearch.cs", "Importer.cs", "Updater.cs", "Patcher.cs", "Launcher.cs", "LoaderTab.cs" | ForEach-Object { "$here\src\$_" }
+& $csc /nologo /target:winexe /platform:x64 /optimize+ "/out:$dist\SinSpire-ModManager.exe" @iconArgument @references "/r:Microsoft.CSharp.dll" "/resource:$build\ue4ss.zip,ue4ss.zip" "/resource:$build\modkit.zip,modkit.zip" "/resource:$here\CREDITS.txt,CREDITS.txt" "/resource:$build\version.txt,version.txt" @sources
+if ($LASTEXITCODE -ne 0) { throw "The Mod Manager did not compile" }
+Copy-Item "$dist\SinSpire-ModManager.exe" "$dist\SinSpire-ModLoader-Patch.exe" -Force
+Get-Item "$dist\SinSpire-ModManager.exe", "$dist\SinSpire-ModLoader-Patch.exe" | Select-Object Name, Length

@@ -8,11 +8,11 @@ A one-click patch and a small framework for modding Sin Spire, with a set of pre
 
 ## Download
 
-**[Download the patch](https://github.com/Scott-s-Modding-Cult/sin-spire-modloader/releases/latest/download/SinSpire-ModLoader-Patch.exe)** (`SinSpire-ModLoader-Patch.exe`). This link always gives the newest version, so it is the only one you need, and you only download it once: the loader then checks for new versions by itself (at most once a day, after the game has started) and asks at the next start whether to update. The Mod Manager's Get Mods tab shows it too. Older patch releases stay on the Releases page only for reference.
+**[Download the Sin Spire Mod Manager](https://github.com/Scott-s-Modding-Cult/sin-spire-modloader/releases/latest/download/SinSpire-ModManager.exe)** (`SinSpire-ModManager.exe`). It is the only thing you need: open it, and its **Mod Loader** tab installs the mod loader in your game, with UE4SS and the preset mods. From then on the same Mod Manager turns mods on and off, gets new ones (**Get Mods**), and updates itself and the loader. You only download it once. It can add itself to the Start menu, and holding Shift while starting the game, or `Mod Manager.bat` in the game folder, opens it too.
 
 ## Preset mods
 
-The mods marked `preset` in `docs\mods\mods.json` are installed by the patch the first time it patches a game, straight from their zips in `mods\` on GitHub, and appear in the Mod Manager, where each can be turned on or off. The patch itself carries no mods. It gives each preset only once: one you remove stays removed, and a copy you already have, older or newer, is left as it is. A game first patched without internet gets them the next time the patch runs online, or from Get Mods. Taking a mod out of `mods.json` stops it being given out.
+The mods marked `preset` in `docs\mods\mods.json` are installed with the mod loader the first time it goes into a game, straight from their zips in `mods\` on GitHub, and appear in the Mod Manager, where each can be turned on or off. The Mod Manager itself carries no mods. It gives each preset only once: one you remove stays removed, and a copy you already have, older or newer, is left as it is. A game first patched without internet gets them at the next Repair with internet, or from Get Mods. Taking a mod out of `mods.json` stops it being given out.
 
 | Mod | What it does | Keys |
 | --- | --- | --- |
@@ -31,39 +31,47 @@ The [mod browser](https://scott-s-modding-cult.github.io/sin-spire-modloader/mod
 
 The Mod Manager's **Get Mods** tab lists every mod in `mods.json` with a zip, with the installed and the latest version, and installs and updates them from those zips, checking each download against its SHA-256. An update replaces the mod's folder and keeps your settings, and the old version is saved in `Mods\.modloader\backup`. A copy newer than the listed one shows as Newer installed and is never replaced with the older one.
 
-## Building the patch
+## Building the Mod Manager
 
-You need Windows, which already includes the compiler this uses, and a copy of [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS) that works with the game. The loader was tested with v3.0.1 Beta. UE4SS's `dwmapi.dll` and `ue4ss` folder get packed into the patch.
+You need Windows, which already includes the compiler this uses, and a copy of [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS) that works with the game. The loader was tested with v3.0.1 Beta. UE4SS's `dwmapi.dll` and `ue4ss` folder get packed into the Mod Manager.
 
-Double-click **`Build Patch.bat`**. It opens the `dist` folder when it finishes, with `SinSpire-ModLoader-Patch.exe` inside.
+Double-click **`Build Patch.bat`**. It opens the `dist` folder when it finishes, with `SinSpire-ModManager.exe` inside, and the same file as `SinSpire-ModLoader-Patch.exe`, the name earlier versions and the Multiplayer Hub setup download.
 
-It looks for UE4SS in a `ue4ss_files` folder beside the script, then in any Steam copy of the game that has it. If it finds none, it asks you to choose the folder. It takes the patch's icon from your copy of the game when it can find one.
+It looks for UE4SS in a `ue4ss_files` folder beside the script, then in any Steam copy of the game that has it. If it finds none, it asks you to choose the folder. It takes the icon from your copy of the game when it can find one.
 
 To choose the folders yourself, run the script directly:
 
 ```powershell
-.\scripts\build.ps1 -GameDir "D:\SteamLibrary\steamapps\common\Sin Spire" -Ue4ssDir "C:\path\to\folder\with\dwmapi.dll"
+.\scripts\build.ps1 -GameDir "D:\SteamLibrary\steamapps\common\Sin Spire" -Ue4ssDir "C:\path\to\folder\with\dwmapi.dll" -Tag patch-2026.11.14.2
 ```
 
-## Patching the game
+## One program, three jobs
+
+`SinSpire-ModManager.exe` is the whole mod loader. Where it runs decides what it does:
+
+- **Opened from anywhere else** (the download, or the Start menu entry), it is the **Mod Manager** app.
+- **In the game folder as `SinSpire.exe`**, it is the **launcher**: it puts the enabled mods in place and starts the game. Installing the mod loader copies the Mod Manager there. Hold Shift while starting the game, or pass `-modmanager`, to get the Mod Manager first.
+- **With arguments**, it works without a window: `--patch "<game>"` and `--unpatch "<game>"` install and remove the loader (exit code 0 when it worked), and `--update` and `--handover` are what its own updates use.
+
+## Installing the mod loader
 
 1. Close the game.
-2. Run `SinSpire-ModLoader-Patch.exe`. It looks for the game by itself and selects a Steam copy first.
-3. Check the folder it chose, then click **Patch Game**.
+2. Open `SinSpire-ModManager.exe`. It finds the game by itself and opens on its **Mod Loader** tab.
+3. Check the folder it chose, then click **Install Mod Loader**.
 
-The patch asks Steam for its libraries and installed games, then checks a running copy of the game, Windows' list of installed programs, the folders around the patch, and common game folders on each drive. If none of those has the game, it searches the top few levels of your drives for up to 8 seconds. If that also fails, it asks you to choose the folder, and it accepts a choice just above or inside the game's folder.
+It asks Steam for its libraries and installed games, then checks a running copy of the game, Windows' list of installed programs, the folders around the Mod Manager, and common game folders on each drive. If none of those has the game, choose its folder with **Browse...**; it accepts a choice just above or inside the game's folder. It remembers the folder for next time.
 
-The patch keeps the game's own exe as `SinSpire-Original.exe` and installs the loader as `SinSpire.exe`. Mods already installed in `ue4ss\Mods` or `Content\Paks\~mods` are moved into `Mods`, and each stays on or off as it was. It is safe to run again.
+Installing keeps the game's own exe as `SinSpire-Original.exe` and puts the Mod Manager in as `SinSpire.exe`. Mods already installed in `ue4ss\Mods` or `Content\Paks\~mods` are moved into `Mods`, and each stays on or off as it was. **Repair** installs it again over itself, which is safe at any time.
 
-The patch always leaves the game with the UE4SS it carries (v3.0.1 Beta, 1ceefac8), the build the mods here are made and tested for; a mod with a C++ part only loads in that exact build. Any other UE4SS already installed, older or newer, is replaced, and the files it overwrites are saved in `Mods\.modloader\ue4ss_before_patch`. That UE4SS's settings stay, and the mods in its `ue4ss\Mods` folder move into `Mods` like any others. UE4SS 3.0.1 keeps its files straight in `Win64` rather than in a `ue4ss` folder; its Lua mods move into `Mods`, each staying on or off as it was.
+The loader always leaves the game with the UE4SS it carries (v3.0.1 Beta, 1ceefac8), the build the mods here are made and tested for; a mod with a C++ part only loads in that exact build. Any other UE4SS already installed, older or newer, is replaced, and the files it overwrites are saved in `Mods\.modloader\ue4ss_before_patch`. That UE4SS's settings stay, and the mods in its `ue4ss\Mods` folder move into `Mods` like any others. UE4SS 3.0.1 keeps its files straight in `Win64` rather than in a `ue4ss` folder; its Lua mods move into `Mods`, each staying on or off as it was.
 
-**Remove Patch** puts the original exe back and takes away the links. If the patch installed UE4SS, it removes that too, and if it replaced another UE4SS, it puts that one back. The `Mods` folder is kept.
+**Remove Mod Loader** puts the original exe back and takes away the links. If the loader installed UE4SS, it removes that too, and if it replaced another UE4SS, it puts that one back. The `Mods` folder is kept. Opened from the game folder, the Mod Manager can't replace or delete its own file, so it hands that work to a copy of itself in the temp folder, which then opens the Mod Manager again.
 
-A Steam update or file verification restores the game's exe, which turns the loader off. Run the patch again afterwards.
+A Steam update or file verification restores the game's exe, which turns the loader off. Click **Repair** afterwards.
 
-**Updates.** Each patch records its release (`patch-YYYY.MM.DD`) in `Mods\.modloader\install.txt`. After the game starts, the loader asks GitHub for the newest full release whose tag starts with `patch-` (other releases, such as single mods, are passed over) and remembers it in `Mods\.modloader\update.txt`. At the next start it offers **Update**, **Skip This Version** or **Not Now**. Update downloads the patch, checks it against GitHub's size and SHA-256, and hands over to it: the patch waits for the loader to close, patches the game as usual and starts it again. Its log is `Mods\.modloader\update.log`. A release only reaches players when it is a full release (not a pre-release) tagged `patch-YYYY.MM.DD` with `SinSpire-ModLoader-Patch.exe` attached, and built with `build.ps1 -Tag` set to that same tag. Patches from before 2026-11-14 have no updater: run the new patch once.
+**Updates.** Each version records its release (`patch-YYYY.MM.DD`) in `Mods\.modloader\install.txt`. After the game starts, the launcher asks GitHub for the newest full release whose tag starts with `patch-` (other releases, such as single mods, are passed over) and remembers it in `Mods\.modloader\update.txt`; at the next start it offers **Update**, **Skip This Version** or **Not Now**. The Mod Manager's Mod Loader tab checks when it opens, and has an **Update** button. Either way the new version is downloaded, checked against GitHub's size and SHA-256, and started; the old one closes, and the new one updates the loader in the game, puts itself in place of the Mod Manager you opened, and starts it again. Its log is `Mods\.modloader\update.log`. A release only reaches players when it is a full release (not a pre-release) tagged `patch-YYYY.MM.DD`, with `SinSpire-ModManager.exe` attached (and the same file as `SinSpire-ModLoader-Patch.exe`, for loaders from patch-2026.11.14), built with `scripts\build.ps1 -Tag` set to that same tag. Versions from before 2026-11-14 have no updater: open the new Mod Manager once.
 
-To bring mods to another copy of the game, run the patch from a folder that has a `Mods` folder beside it and choose the other copy.
+To bring mods to another copy of the game, run the Mod Manager from a folder that has a `Mods` folder beside it and install into the other copy.
 
 ## Using mods
 
@@ -156,7 +164,7 @@ The game's own menus handle the controller themselves, so their buttons read as 
 
 ## Testing
 
-`tests\test_patch.ps1` runs the patch and launcher against a fake game folder in your temp directory, with no real game files involved. Build first. Holding Shift while it runs opens the Mod Manager, which the test closes before trying again.
+`tests\test_patch.ps1` installs and removes the loader and runs the launcher against a fake game folder in your temp directory, with no real game files involved. `tests\test_app.ps1 -NewerApp <exe>` drives the Mod Manager app (installing from its Mod Loader tab, the hand-over copy, an update that replaces the downloaded app), `tests\test_update.ps1 -NewerPatch <exe>` the launcher's update prompt, and `tests\test_import.ps1` Get Mods with real downloads. For the update tests, build a second copy with `-Tag patch-2099.01.01`. Build first. Holding Shift while it runs opens the Mod Manager, which the test closes before trying again.
 
 ## Donating
 

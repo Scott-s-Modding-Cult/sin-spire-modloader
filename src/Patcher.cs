@@ -1,10 +1,6 @@
-// The one-click patch: a single program holding the launcher, UE4SS and ModKit. It works out which game folder to
-// patch, moves any mods already installed into the Mods folder, and can undo all of it.
-//   SinSpire-ModLoader-Patch.exe                     Opens the window.
-//   SinSpire-ModLoader-Patch.exe --patch "<folder>"    Patches without a window. The exit code is 0 on success.
-//   SinSpire-ModLoader-Patch.exe --unpatch "<folder>"  Removes the patch without a window.
-//   SinSpire-ModLoader-Patch.exe --find "<file>" [<choice>...]  Writes what the search finds, for testing.
-//   SinSpire-ModLoader-Patch.exe --no-search         Opens the window as if no game were found, for testing.
+// Installing and removing the mod loader in a game: UE4SS and ModKit (carried in this program), this program itself as
+// the game's SinSpire.exe, and the preset mods from the mod list. It moves mods already installed the old ways into the
+// Mods folder, and can undo all of it. The Mod Manager's Mod Loader tab and the --patch and --unpatch modes run it.
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -19,9 +15,6 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-[assembly: AssemblyProduct("SinSpire Mod Loader Patch")]
-[assembly: AssemblyTitle("Sin Spire Mod Loader Patch")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
 
 namespace SinSpireModLoader
 {
@@ -78,7 +71,7 @@ namespace SinSpireModLoader
             }
         }
 
-        static bool IsLauncher(string exe)
+        public static bool IsLauncher(string exe)
         {
             return File.Exists(exe) && (FileVersionInfo.GetVersionInfo(exe).ProductName == LoaderProduct
                 || new FileInfo(exe).Length == OldMonitorLauncherSize);
@@ -97,10 +90,10 @@ namespace SinSpireModLoader
             {
                 throw new IOException("SinSpire-Original.exe is missing. Verify the game's files in Steam, then patch again.");
             }
-            using (Stream from = Resource("launcher.exe"))
-            using (Stream to = File.Create(game.Exe))
+            // The launcher is this program: in the game folder as SinSpire.exe it starts the game with the mods.
+            if (!string.Equals(App.Self, game.Exe, StringComparison.OrdinalIgnoreCase))
             {
-                from.CopyTo(to);
+                File.Copy(App.Self, game.Exe, true);
             }
             say("Installed the mod loader as SinSpire.exe.");
         }
@@ -129,7 +122,7 @@ namespace SinSpireModLoader
         }
 
         // The SHA-256 of the UE4SS.dll this patch carries.
-        static string BundledUe4ssSha256()
+        public static string BundledUe4ssSha256()
         {
             using (var zip = new ZipArchive(Resource("ue4ss.zip"), ZipArchiveMode.Read))
             {
@@ -425,239 +418,6 @@ namespace SinSpireModLoader
             }
             RestoreUe4ss(game, say);
             say("Patch removed. Your mods are still in the Mods folder but will not load.");
-        }
-    }
-
-    static class PatchProgram
-    {
-        static string Arg(string[] args, string name)
-        {
-            int at = Array.IndexOf(args, name);
-            return at >= 0 && at + 1 < args.Length ? args[at + 1] : null;
-        }
-
-        // Waits for the launcher to close (it is the SinSpire.exe being replaced), patches with a small window showing,
-        // then starts SinSpire.exe again: the game, or the Mod Manager when the update came from there.
-        static int Update(GameFolder game, string waitFor, string thenArguments)
-        {
-            int id;
-            if (int.TryParse(waitFor, out id))
-            {
-                try { using (Process launcher = Process.GetProcessById(id)) { launcher.WaitForExit(30000); } }
-                catch (ArgumentException) { } // already gone
-            }
-            Application.EnableVisualStyles();
-            var report = new List<string> { "Updating the mod loader to " + (Patch.Tag ?? "a new version") + "." };
-            Exception failure = null;
-            using (var form = new ProgressForm("Updating the Sin Spire Mod Loader", "Updating the mod loader to " + (Patch.Tag ?? "a new version") + "..."))
-            {
-                form.Shown += async (s, e) =>
-                {
-                    try { await Task.Run(() => Patch.Apply(game, line => { report.Add(line); form.Say(line); })); }
-                    catch (Exception error) { failure = error; }
-                    form.Close();
-                };
-                Application.Run(form);
-            }
-            if (failure != null) { report.Add("Failed: " + failure); }
-            // Its own log, as every start of the game begins modloader.log afresh.
-            string updateLog = Path.Combine(game.State, "update.log");
-            try
-            {
-                Directory.CreateDirectory(game.State);
-                File.AppendAllLines(updateLog, report.Select(line => DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + line));
-            }
-            catch (Exception) { }
-            if (failure != null)
-            {
-                MessageBox.Show("The mod loader could not be updated: " + failure.Message + "\n\nThe log is " + updateLog +
-                    ". You can also download the patch again and run it.", "Sin Spire mods", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
-            // Started either way: after a failure the old launcher is still in place, or the game's own exe.
-            Process.Start(new ProcessStartInfo(game.Exe, thenArguments.Replace("'", "\"")) { WorkingDirectory = game.Root, UseShellExecute = false });
-            return failure == null ? 0 : 1;
-        }
-
-        [STAThread]
-        static int Main(string[] args)
-        {
-            if (args.Length == 2 && (args[0] == "--patch" || args[0] == "--unpatch"))
-            {
-                var game = new GameFolder(args[1]);
-                var report = new List<string>();
-                try
-                {
-                    if (args[0] == "--patch") { Patch.Apply(game, report.Add); }
-                    else { Patch.Remove(game, report.Add); }
-                    foreach (string line in report) { game.Log(line); }
-                    return 0;
-                }
-                catch (Exception error)
-                {
-                    report.Add("Failed: " + error);
-                    foreach (string line in report) { game.Log(line); }
-                    return 1;
-                }
-            }
-            // From the launcher's updater: --update "<folder>" --wait <launcher's process id> [--then "<arguments>"]
-            if (args.Length >= 2 && args[0] == "--update")
-            {
-                return Update(new GameFolder(args[1]), Arg(args, "--wait"), Arg(args, "--then") ?? "");
-            }
-            if (args.Length >= 2 && args[0] == "--find")
-            {
-                var lines = GameSearch.Quick().Select(f => "quick|" + f.Source + "|" + f.Folder).ToList();
-                lines.AddRange(GameSearch.Drives().Select(f => "drives|" + f.Source + "|" + f.Folder));
-                foreach (string choice in args.Skip(2)) { lines.Add("choice|" + choice + "|" + GameSearch.ResolveChoice(choice)); }
-                File.WriteAllLines(args[1], lines);
-                return 0;
-            }
-            Application.EnableVisualStyles();
-            Application.Run(new PatchForm(args.Contains("--no-search")));
-            return 0;
-        }
-    }
-
-    class PatchForm : Form
-    {
-        readonly ComboBox folder = new ComboBox { Dock = DockStyle.Fill };
-        readonly TextBox output = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
-        readonly Label status = new Label { AutoSize = true };
-        readonly Button browse = new Button { Text = "Browse...", AutoSize = true };
-        readonly Button patch = new Button { Text = "Patch Game", AutoSize = true };
-        readonly Button remove = new Button { Text = "Remove Patch", AutoSize = true };
-        readonly Dictionary<string, string> sources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        public PatchForm(bool skipSearch)
-        {
-            Text = "Sin Spire Mod Loader Patch" + (Patch.Tag != null ? " (" + Patch.Tag + ")" : "");
-            AutoScaleDimensions = new SizeF(96F, 96F);
-            AutoScaleMode = AutoScaleMode.Dpi;
-            ClientSize = new Size(640, 380);
-            MinimumSize = new Size(480, 300);
-            StartPosition = FormStartPosition.CenterScreen;
-
-            browse.Click += (s, e) => AskForFolder("Choose the Sin Spire folder, the one with SinSpire.exe in it.");
-            folder.SelectedIndexChanged += (s, e) => ShowSource();
-            patch.Click += (s, e) => Run(Patch.Apply);
-            var tips = new ToolTip { AutoPopDelay = 20000, InitialDelay = 400 };
-            tips.SetToolTip(browse, "Choose the game's folder yourself, the one with SinSpire.exe in it.");
-            tips.SetToolTip(patch, "Install the mod loader and UE4SS in this game, and the preset mods the first time. Safe to run again.");
-            tips.SetToolTip(remove, "Put the game's own exe back and stop loading mods. Your Mods folder is kept, and a UE4SS the patch replaced comes back.");
-            remove.Click += (s, e) =>
-            {
-                if (MessageBox.Show(this, "Remove the mod loader from this game? Your Mods folder is kept.", Text, MessageBoxButtons.OKCancel) == DialogResult.OK)
-                {
-                    Run(Patch.Remove);
-                }
-            };
-
-            var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, FlowDirection = FlowDirection.RightToLeft };
-            buttons.Controls.AddRange(new Control[] { patch, remove });
-            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 5, Padding = new Padding(8) };
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            var label = new Label { Text = "Game folder", AutoSize = true };
-            layout.Controls.Add(label, 0, 0);
-            layout.SetColumnSpan(label, 2);
-            layout.Controls.Add(folder, 0, 1);
-            layout.Controls.Add(browse, 1, 1);
-            layout.Controls.Add(status, 0, 2);
-            layout.SetColumnSpan(status, 2);
-            layout.Controls.Add(output, 0, 3);
-            layout.SetColumnSpan(output, 2);
-            layout.Controls.Add(buttons, 0, 4);
-            layout.SetColumnSpan(buttons, 2);
-            Controls.Add(layout);
-
-            Shown += (s, e) => Search(skipSearch);
-        }
-
-        void Search(bool skip)
-        {
-            List<FoundGame> quick = skip ? new List<FoundGame>() : GameSearch.Quick();
-            if (quick.Count > 0 || skip)
-            {
-                Finish(quick);
-                return;
-            }
-
-            // Nothing obvious, so look through the drives without freezing the window.
-            status.Text = "Looking for the game on your drives...";
-            patch.Enabled = remove.Enabled = browse.Enabled = false;
-            Task.Factory.StartNew(() => GameSearch.Drives()).ContinueWith(task =>
-            {
-                patch.Enabled = remove.Enabled = browse.Enabled = true;
-                Finish(task.IsFaulted ? new List<FoundGame>() : task.Result);
-            }, TaskScheduler.FromCurrentSynchronizationContext());
-        }
-
-        void Finish(List<FoundGame> found)
-        {
-            foreach (FoundGame game in found)
-            {
-                sources[game.Folder] = game.Source;
-                folder.Items.Add(game.Folder);
-            }
-            if (found.Count > 0)
-            {
-                folder.SelectedIndex = 0;
-                return;
-            }
-            status.Text = "The game was not found. Choose its folder with Browse.";
-            AskForFolder("Sin Spire was not found on this PC. Choose its folder, the one with SinSpire.exe in it.");
-        }
-
-        void ShowSource()
-        {
-            string source;
-            status.Text = sources.TryGetValue(folder.Text, out source) ? "Found: " + source + "." : "";
-        }
-
-        // Keeps asking until the choice is the game or the person gives up.
-        void AskForFolder(string message)
-        {
-            using (var dialog = new FolderBrowserDialog { Description = message })
-            {
-                while (dialog.ShowDialog(this) == DialogResult.OK)
-                {
-                    string chosen = GameSearch.ResolveChoice(dialog.SelectedPath);
-                    if (chosen != null)
-                    {
-                        sources[chosen] = "Chosen by you";
-                        folder.Text = chosen;
-                        ShowSource();
-                        return;
-                    }
-                    MessageBox.Show(this, "Sin Spire was not found in that folder. Choose the folder with SinSpire.exe in it.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                }
-            }
-        }
-
-        void Run(Action<GameFolder, Action<string>> action)
-        {
-            output.Clear();
-            Action<string> say = line => { output.AppendText(line + Environment.NewLine); output.Update(); };
-            try
-            {
-                string chosen = GameSearch.ResolveChoice(folder.Text);
-                if (chosen == null)
-                {
-                    say("Sin Spire was not found in that folder. Choose the folder with SinSpire.exe in it.");
-                    return;
-                }
-                folder.Text = chosen;
-                action(new GameFolder(chosen), say);
-            }
-            catch (Exception error)
-            {
-                say("Failed: " + error.Message);
-            }
         }
     }
 }

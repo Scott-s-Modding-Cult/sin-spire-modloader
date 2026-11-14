@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $scratch = Join-Path $env:TEMP "sinspire_update_test"
 if (Test-Path $scratch) { cmd /c rmdir /s /q "`"$scratch`"" }
 New-Item -ItemType Directory -Force $scratch | Out-Null
-$patch = "$PSScriptRoot\..\dist\SinSpire-ModLoader-Patch.exe"
+$patch = "$PSScriptRoot\..\dist\SinSpire-ModManager.exe"
 $fake = "$scratch\fake game"
 $script:failures = 0
 # The preset mods come from this repository's mods.json and zips, read as local files instead of from GitHub.
@@ -64,7 +64,7 @@ Check "update installed the newer patch's release" ((Installed) -eq $newerTag)
 Check "the game got its arguments back" ((Get-Content "$fake\launched.txt") -match "-testarg")
 Check "SinSpire.exe is still the launcher" ((Get-Item "$fake\SinSpire.exe").VersionInfo.ProductName -eq "SinSpire Mod Loader")
 Check "the game's own exe is still kept" (Test-Path "$fake\SinSpire-Original.exe")
-Check "the update has its own log" ((Get-Content "$fake\Mods\.modloader\update.log" -Raw) -match "Updating the mod loader to $newerTag")
+Check "the update has its own log" ((Get-Content "$fake\Mods\.modloader\update.log" -Raw) -match "Updating to $newerTag")
 Check "nothing offered after updating" ($null -eq (Get-Content "$fake\Mods\.modloader\update.txt" | Where-Object { $_ -like "tag=*" } | Where-Object { [string]::CompareOrdinal(($_ -replace '^tag=', ''), (Installed)) -gt 0 }))
 
 "--- log"; Get-Content "$fake\Mods\.modloader\modloader.log" | Select-Object -Last 10

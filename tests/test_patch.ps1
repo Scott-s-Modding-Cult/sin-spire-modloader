@@ -1,7 +1,7 @@
 # Exercises the patch and launcher on a fake game folder. No real game files are touched.
 $ErrorActionPreference = "Stop"
 $scratch = Join-Path $env:TEMP "sinspire_modloader_test"; New-Item -ItemType Directory -Force $scratch | Out-Null
-$patch = "$PSScriptRoot\..\dist\SinSpire-ModLoader-Patch.exe"
+$patch = "$PSScriptRoot\..\dist\SinSpire-ModManager.exe"
 $fake = "$scratch\fake game"
 $script:failures = 0
 # The launcher checks for mod loader updates after starting the game: point it at nothing instead of GitHub.
@@ -58,6 +58,7 @@ Set-Content "$fake\Mods\AdminPanel\Scripts\main.lua" "-- edited by the player"
 Set-Content "$fake\Mods\CrabPair\settings.txt" "keep=1"
 Check "original exe kept" ((Get-FileHash "$fake\SinSpire-Original.exe").Hash -eq $originalHash)
 Check "exe replaced" ((Get-Item "$fake\SinSpire.exe").VersionInfo.ProductName -eq "SinSpire Mod Loader")
+Check "the launcher is the Mod Manager itself" ((Get-FileHash "$fake\SinSpire.exe").Hash -eq (Get-FileHash $patch).Hash)
 Check "loose pak adopted" (Test-Path "$fake\Mods\Loose\Paks\SinSpire-Loose_P.pak")
 Check "loose pak linked back" (Test-Path "$fake\SinSpire\Content\Paks\~mods\SinSpire-Loose_P.pak")
 Check "ModKit library linked" (Test-Path "$win64\ue4ss\Mods\shared\ModKit\ModKit.lua")

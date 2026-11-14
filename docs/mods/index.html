@@ -265,7 +265,7 @@
 <header class="topbar">
   <nav>
     <a class="brand" href="../">Sin Spire Mod Loader</a>
-    <a href="https://github.com/Scott-s-Modding-Cult/sin-spire-modloader/releases/latest/download/SinSpire-ModLoader-Patch.exe">Download patch</a>
+    <a href="https://github.com/Scott-s-Modding-Cult/sin-spire-modloader/releases/latest/download/SinSpire-ModManager.exe">Download Mod Manager</a>
     <a href="../">Support</a>
     <a href="https://github.com/Scott-s-Modding-Cult/sin-spire-modloader">GitHub</a>
     <a class="cta" href="./" aria-current="page">Browse mods</a>
@@ -275,12 +275,12 @@
 <div class="wrap">
   <header>
     <h1>Mods</h1>
-    <p>Every mod here works with the Sin Spire Mod Loader. Most come with the patch already; the rest you can add from the Mod Manager.</p>
+    <p>Every mod here works with the Sin Spire Mod Loader. The Mod Manager installs the preset ones with the mod loader; add the rest from its Get Mods tab.</p>
   </header>
 
   <section class="install" aria-label="How to install">
-    <div><strong>1. Patch the game</strong><a href="https://github.com/Scott-s-Modding-Cult/sin-spire-modloader/releases/latest/download/SinSpire-ModLoader-Patch.exe">Download <code>SinSpire-ModLoader-Patch.exe</code></a> (always the newest) and run it. It finds the game and installs the loader, and keeps itself up to date after that.</div>
-    <div><strong>2. Get mods</strong>Hold Shift while launching, or run <code>Mod Manager.bat</code>, and use the <b>Get Mods</b> tab. Or unzip a download into the game's <code>Mods</code> folder.</div>
+    <div><strong>1. Get the Mod Manager</strong><a href="https://github.com/Scott-s-Modding-Cult/sin-spire-modloader/releases/latest/download/SinSpire-ModManager.exe">Download <code>SinSpire-ModManager.exe</code></a> (always the newest), open it, and click Install Mod Loader. It finds the game, installs the loader, and keeps itself up to date after that.</div>
+    <div><strong>2. Get mods</strong>Open the Mod Manager (Start menu, the download, or hold Shift while launching) and use the <b>Get Mods</b> tab. Or unzip a download into the game's <code>Mods</code> folder.</div>
     <div><strong>3. Play</strong>Tick the mods you want in the Mod Manager. Changes take effect on the next launch.</div>
   </section>
 
@@ -367,8 +367,8 @@
       a.setAttribute("aria-label", "Download " + mod.title);
       foot.append(a);
     } else {
-      const a = el("a", "button ghost", "Get the patch");
-      a.href = "https://github.com/Scott-s-Modding-Cult/sin-spire-modloader/releases/latest/download/SinSpire-ModLoader-Patch.exe";
+      const a = el("a", "button ghost", "Get the Mod Manager");
+      a.href = "https://github.com/Scott-s-Modding-Cult/sin-spire-modloader/releases/latest/download/SinSpire-ModManager.exe";
       foot.append(a);
     }
     body.append(foot);

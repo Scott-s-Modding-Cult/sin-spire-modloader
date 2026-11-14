@@ -1,6 +1,7 @@
-// Takes the place of SinSpire.exe. Puts the enabled mods in place, then starts the original game with the saved
-// monitor's position, because -WinX and -WinY are the only way to make the first frame open on that monitor.
-// Hold Shift while starting it, or pass -modmanager, to get the mod list first.
+// The launcher role of the Sin Spire Mod Manager (see App.cs): as the game's SinSpire.exe it puts the enabled mods in
+// place, then starts the original game with the saved monitor's position, because -WinX and -WinY are the only way to
+// make the first frame open on that monitor. Hold Shift while starting it, or pass -modmanager, to get the Mod Manager
+// first. The Mod Manager window itself is ManagerForm, here and in LoaderTab.cs.
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -23,9 +24,6 @@ namespace SinSpireModLoader
     {
         const string ManagerArgument = "-modmanager";
         const string MonitorFile = @"SinSpire\Binaries\Win64\ue4ss\Mods\MonitorSetting\monitor.txt";
-
-        [DllImport("user32.dll")]
-        static extern bool SetProcessDPIAware();
 
         // Windows numbers each display in its device name, such as \\.\DISPLAY2.
         static int DisplayNumber(Screen screen)
@@ -72,25 +70,19 @@ namespace SinSpireModLoader
             Process.Start(start);
         }
 
-        [STAThread]
-        static void Main(string[] args)
+        public static void Run(GameFolder game, string[] args)
         {
-            // Without this, Windows reports scaled positions on monitors that are not at 100%.
-            SetProcessDPIAware();
-            Application.EnableVisualStyles();
-            var game = new GameFolder(AppDomain.CurrentDomain.BaseDirectory);
-
             bool wantsManager = (Control.ModifierKeys & Keys.Shift) != 0
                 || args.Any(a => a.Equals(ManagerArgument, StringComparison.OrdinalIgnoreCase));
             if (wantsManager)
             {
-                var manager = new ManagerForm(game);
+                var manager = new ManagerForm(game, false);
                 Application.Run(manager);
                 if (!manager.Play) { return; }
             }
             else if (OfferUpdate(game))
             {
-                return; // The patch updates the game and starts it again.
+                return; // The new version updates the game and starts it again.
             }
 
             // Whatever goes wrong with the mods, the game itself should still start.
@@ -124,7 +116,7 @@ namespace SinSpireModLoader
                 if (release == null) { return false; }
                 UpdateChoice choice = UpdatePrompt.Ask(release, Updater.InstalledTag(game));
                 if (choice == UpdateChoice.Skip) { Updater.Skip(game, release.Tag); }
-                return choice == UpdateChoice.Update && Updater.DownloadAndStart(game, release, PassedArguments(), null);
+                return choice == UpdateChoice.Update && Updater.DownloadAndStart(game, release, PassedArguments(), null, null);
             }
             catch (Exception error)
             {
@@ -134,9 +126,11 @@ namespace SinSpireModLoader
         }
     }
 
-    class ManagerForm : Form
+    partial class ManagerForm : Form
     {
-        readonly GameFolder game;
+        GameFolder game; // null in the app until a game folder is chosen
+        readonly bool standalone; // the downloaded app, not the copy in the game folder
+        public GameFolder Game { get { return game; } }
         readonly List<ModInfo> mods;
         readonly CheckedListBox list = new CheckedListBox { Dock = DockStyle.Fill, CheckOnClick = true, IntegralHeight = false };
         readonly TextBox details = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
@@ -147,25 +141,23 @@ namespace SinSpireModLoader
         readonly Button recheck = new Button { Text = "Check Again", AutoSize = true };
         readonly Button play = new Button { Text = "Save and Play", AutoSize = true };
         readonly Button close = new Button { Text = "Save and Close", AutoSize = true };
-        readonly Label loaderStatus = new Label { AutoSize = true, Anchor = AnchorStyles.Left, Padding = new Padding(0, 6, 0, 6) };
-        readonly Button updateLoader = new Button { Text = "Update Mod Loader", AutoSize = true, Visible = false };
         // Hover help for every button. A disabled button shows none, so the Get Mods rows explain their own state too.
         readonly ToolTip tips = new ToolTip { AutoPopDelay = 20000, InitialDelay = 400, ReshowDelay = 100 };
-        PatchRelease loaderRelease;
         List<RepoMod> repoMods = new List<RepoMod>();
         bool repoChecked, busy;
         bool filling;
 
         public bool Play { get; private set; }
 
-        public ManagerForm(GameFolder game)
+        public ManagerForm(GameFolder game, bool standalone)
         {
             this.game = game;
-            mods = Registry.Load(game);
-            Text = "Sin Spire Mods";
+            this.standalone = standalone;
+            mods = game != null ? Registry.Load(game) : new List<ModInfo>();
+            Text = App.Name + (Patch.Tag != null ? " (" + Patch.Tag + ")" : "");
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
-            ClientSize = new Size(760, 500);
+            ClientSize = new Size(800, 540);
             MinimumSize = new Size(560, 380);
             StartPosition = FormStartPosition.CenterScreen;
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); }
@@ -176,9 +168,9 @@ namespace SinSpireModLoader
             var folder = new Button { Text = "Open Mods Folder", AutoSize = true };
             up.Click += (s, e) => MoveSelected(-1);
             down.Click += (s, e) => MoveSelected(1);
-            folder.Click += (s, e) => { Directory.CreateDirectory(game.Mods); Process.Start(game.Mods); };
-            play.Click += (s, e) => { Registry.Save(game, mods); Play = true; Close(); };
-            close.Click += (s, e) => { Registry.Save(game, mods); Close(); };
+            folder.Click += (s, e) => { if (game == null) { return; } Directory.CreateDirectory(game.Mods); Process.Start(game.Mods); };
+            play.Click += (s, e) => { SaveList(); Play = true; Close(); };
+            close.Click += (s, e) => { SaveList(); Close(); };
             list.ItemCheck += ListItemCheck;
             list.SelectedIndexChanged += (s, e) => ShowDetails();
             tips.SetToolTip(up, "Load the selected mod earlier. Mods load from the top of the list down.");
@@ -211,7 +203,11 @@ namespace SinSpireModLoader
             modsTab.Controls.Add(layout);
             var repoTab = new TabPage("Get Mods");
             repoTab.Controls.Add(BuildRepoPage());
-            tabs.TabPages.AddRange(new[] { modsTab, repoTab });
+            var loaderTab = new TabPage("Mod Loader");
+            loaderTab.Controls.Add(BuildLoaderPage());
+            tabs.TabPages.AddRange(new[] { modsTab, repoTab, loaderTab });
+            // The app opens on the Mod Loader tab until the loader is installed in a game.
+            if (standalone && !LoaderInstalled) { tabs.SelectedTab = loaderTab; }
             // The list comes from the internet, so it waits until someone asks for this tab.
             tabs.SelectedIndexChanged += (s, e) => { if (tabs.SelectedTab == repoTab && !repoChecked) { CheckRepo(); } };
 
@@ -223,8 +219,10 @@ namespace SinSpireModLoader
             Controls.Add(outer);
             // A swap of a mod's folders must not be cut short.
             FormClosing += (s, e) => { if (busy) { e.Cancel = true; } };
+            Shown += (s, e) => LoaderShown();
 
             Fill(0);
+            ShowLoader();
         }
 
         Control BuildRepoPage()
@@ -237,13 +235,9 @@ namespace SinSpireModLoader
             repoList.SelectedIndexChanged += (s, e) => UpdateInstallButton();
             install.Click += (s, e) => InstallSelected();
             recheck.Click += (s, e) => CheckRepo();
-            updateLoader.Click += (s, e) => UpdateLoader();
             repoList.ShowItemToolTips = true;
-            tips.SetToolTip(recheck, "Read the mod list again and check for a new version of the Mod Loader.");
-            tips.SetToolTip(updateLoader, "Download the new Mod Loader, update it, and open this window again. Your mods, their settings and your saves stay as they are.");
+            tips.SetToolTip(recheck, "Read the mod list again and check for a new version of the Mod Manager.");
             tips.SetToolTip(install, "Select a mod in the list first.");
-            loaderRelease = Updater.Pending(game); // what the last check found, until this tab checks again
-            ShowLoader();
 
             var note = new Label
             {
@@ -255,27 +249,24 @@ namespace SinSpireModLoader
             var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
             buttons.Controls.AddRange(new Control[] { install, recheck });
 
-            var loader = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(0, 0, 0, 4) };
-            loader.Controls.AddRange(new Control[] { loaderStatus, updateLoader });
-
-            var page = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(8) };
-            page.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            var page = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(8) };
             page.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             page.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
             page.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             page.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            page.Controls.Add(loader, 0, 0);
-            page.Controls.Add(note, 0, 1);
-            page.Controls.Add(repoList, 0, 2);
-            page.Controls.Add(repoStatus, 0, 3);
-            page.Controls.Add(buttons, 0, 4);
+            page.Controls.Add(note, 0, 0);
+            page.Controls.Add(repoList, 0, 1);
+            page.Controls.Add(repoStatus, 0, 2);
+            page.Controls.Add(buttons, 0, 3);
             return page;
         }
 
         void SetBusy(bool value, string message)
         {
             busy = value;
-            recheck.Enabled = play.Enabled = close.Enabled = updateLoader.Enabled = !value;
+            recheck.Enabled = close.Enabled = !value;
+            play.Enabled = !value && LoaderInstalled;
+            SetLoaderBusy(value);
             repoStatus.Text = message;
             UpdateInstallButton();
         }
@@ -292,39 +283,17 @@ namespace SinSpireModLoader
             }
             catch (Exception error)
             {
-                game.Log("Could not list the mods to download: " + error);
+                Log("Could not list the mods to download: " + error);
                 message = "Could not check for mods: " + error.Message;
             }
-            try
-            {
-                loaderRelease = await Task.Run(() => Updater.CheckNow(game));
-            }
-            catch (Exception error)
-            {
-                game.Log("Could not check for a mod loader update: " + error.Message);
-            }
-            ShowLoader();
+            await CheckLoaderRelease();
             FillRepo();
             SetBusy(false, message);
         }
 
-        void ShowLoader()
-        {
-            string installed = Updater.InstalledTag(game);
-            bool newer = loaderRelease != null && Updater.IsNewer(loaderRelease.Tag, installed);
-            loaderStatus.Text = newer
-                ? "Mod Loader " + loaderRelease.Tag + " is out. You have " + (installed ?? "an older one") + "."
-                : "Mod Loader: " + (installed ?? "a patch from before 2026-11-14") + (loaderRelease != null ? ", up to date." : ".");
-            updateLoader.Visible = newer;
-        }
+        void Log(string message) { if (game != null) { game.Log(message); } }
 
-        // Saves the list, then the patch updates the game and opens this window again.
-        void UpdateLoader()
-        {
-            if (loaderRelease == null) { return; }
-            Registry.Save(game, mods);
-            if (Updater.DownloadAndStart(game, loaderRelease, "-modmanager", this)) { Close(); }
-        }
+        void SaveList() { if (game != null && Directory.Exists(game.Mods)) { Registry.Save(game, mods); } }
 
         async void InstallSelected()
         {
@@ -337,11 +306,11 @@ namespace SinSpireModLoader
                 await Task.Run(() => Importer.Install(game, mod));
                 ReloadMods();
                 message = mod.Title + " " + mod.Version + " is installed. It takes effect the next time the game starts.";
-                game.Log("Installed " + mod.Name + " " + mod.Version + " from the mod list.");
+                Log("Installed " + mod.Name + " " + mod.Version + " from the mod list.");
             }
             catch (Exception error)
             {
-                game.Log("Could not install " + mod.Name + ": " + error);
+                Log("Could not install " + mod.Name + ": " + error);
                 message = "Could not install " + mod.Title + ": " + error.Message;
             }
             FillRepo();
@@ -403,7 +372,7 @@ namespace SinSpireModLoader
 
         void UpdateInstallButton()
         {
-            install.Enabled = !busy && repoList.SelectedItems.Count > 0;
+            install.Enabled = !busy && game != null && repoList.SelectedItems.Count > 0;
             if (repoList.SelectedItems.Count == 0) { return; }
             string status = repoList.SelectedItems[0].SubItems[4].Text;
             install.Text = status == Importer.NotInstalled ? "Install" : status == Importer.UpToDate ? "Reinstall" : "Update";

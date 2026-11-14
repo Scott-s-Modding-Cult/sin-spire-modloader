@@ -1,8 +1,8 @@
-// Keeps the mod loader itself up to date, so players only ever download the patch once. After the game starts, the
-// launcher asks GitHub (at most once a day) for the newest full release tagged patch-..., and remembers the answer.
-// At the next start, if that release is newer than the installed patch, it offers to update: it downloads the patch,
-// checks it against GitHub's size and SHA-256, starts it with --update and exits, and the patch updates the game and
-// starts it again.
+// Keeps the Sin Spire Mod Manager (and so the mod loader in the game) up to date, so players only download it once.
+// After the game starts, the launcher asks GitHub (at most once a day) for the newest full release tagged patch-..., and
+// remembers the answer; the Mod Manager's Mod Loader tab asks when it opens. When that release is newer, an update
+// downloads it, checks it against GitHub's size and SHA-256, starts it with --update and closes, and the new version
+// updates the game, replaces the app the player opened, and starts it again (App.Update).
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -30,6 +30,9 @@ namespace SinSpireModLoader
         // Every release, newest first. The repository also publishes single mods, so the patch is the newest full
         // release whose tag starts with patch-, whichever release GitHub marks as Latest.
         const string ReleasesUrl = "https://api.github.com/repos/Scott-s-Modding-Cult/sin-spire-modloader/releases?per_page=50";
+        // The release's program: the Mod Manager, and the same file under the patch's old name, which loaders up to
+        // patch-2026.11.14 and the Multiplayer Hub setup download.
+        public const string AppAsset = "SinSpire-ModManager.exe";
         public const string PatchAsset = "SinSpire-ModLoader-Patch.exe";
         const string TagPrefix = "patch-";
         // For tests: another releases list (a file:// address works), and an answer to the update question.
@@ -85,9 +88,10 @@ namespace SinSpireModLoader
             {
                 string tag = Text(release, "tag_name");
                 if (true.Equals(Value(release, "draft")) || true.Equals(Value(release, "prerelease")) || !tag.StartsWith(TagPrefix, StringComparison.OrdinalIgnoreCase)) { continue; }
-                foreach (var asset in ((Value(release, "assets") as IEnumerable) ?? new object[0]).OfType<Dictionary<string, object>>())
+                var assets = ((Value(release, "assets") as IEnumerable) ?? new object[0]).OfType<Dictionary<string, object>>().ToList();
+                foreach (var asset in assets.Where(a => string.Equals(Text(a, "name"), AppAsset, StringComparison.OrdinalIgnoreCase))
+                    .Concat(assets.Where(a => string.Equals(Text(a, "name"), PatchAsset, StringComparison.OrdinalIgnoreCase))))
                 {
-                    if (!string.Equals(Text(asset, "name"), PatchAsset, StringComparison.OrdinalIgnoreCase)) { continue; }
                     string digest = Text(asset, "digest");
                     if (!digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase)) { continue; }
                     return new PatchRelease
@@ -130,8 +134,11 @@ namespace SinSpireModLoader
             try
             {
                 // A patch downloaded for an earlier update is no longer running by now.
-                string old = Path.Combine(DownloadFolder, PatchAsset);
-                if (File.Exists(old)) { File.Delete(old); }
+                foreach (string name in new[] { AppAsset, PatchAsset, "SinSpire-ModManager-handover.exe" })
+                {
+                    string old = Path.Combine(DownloadFolder, name);
+                    if (File.Exists(old)) { File.Delete(old); }
+                }
             }
             catch (Exception) { }
             try
@@ -191,7 +198,7 @@ namespace SinSpireModLoader
         public static string Download(PatchRelease release, Action<long> progress)
         {
             Directory.CreateDirectory(DownloadFolder);
-            string path = Path.Combine(DownloadFolder, PatchAsset);
+            string path = Path.Combine(DownloadFolder, AppAsset);
             if (File.Exists(path)) { File.Delete(path); }
             using (WebClient client = NewClient())
             {
@@ -213,18 +220,20 @@ namespace SinSpireModLoader
             return path;
         }
 
-        // The patch waits for this program to close, updates the game, and starts SinSpire.exe again with these arguments.
-        public static void StartUpdate(GameFolder game, string patch, string thenArguments)
+        // The new version waits for this program to close, updates the game (when given), puts itself in place of the app
+        // at appPath (when given) and starts that, or else starts SinSpire.exe again with these arguments.
+        public static void StartUpdate(GameFolder game, string program, string thenArguments, string appPath)
         {
-            string arguments = "--update \"" + game.Root.TrimEnd('\\') + "\" --wait " + Process.GetCurrentProcess().Id;
-            if (thenArguments != "") { arguments += " --then \"" + thenArguments.Replace("\"", "'") + "\""; }
-            Process.Start(new ProcessStartInfo(patch, arguments) { UseShellExecute = false });
+            string arguments = "--update \"" + (game != null ? game.Root.TrimEnd('\\') : "") + "\" --wait " + Process.GetCurrentProcess().Id;
+            if (!string.IsNullOrEmpty(thenArguments)) { arguments += " --then \"" + thenArguments.Replace("\"", "'") + "\""; }
+            if (appPath != null) { arguments += " --app \"" + appPath + "\""; }
+            Process.Start(new ProcessStartInfo(program, arguments) { UseShellExecute = false });
         }
 
         // Downloads with a small progress window, then hands over to the patch. True when the update has started.
-        public static bool DownloadAndStart(GameFolder game, PatchRelease release, string thenArguments, IWin32Window owner)
+        public static bool DownloadAndStart(GameFolder game, PatchRelease release, string thenArguments, IWin32Window owner, string appPath)
         {
-            using (var form = new ProgressForm("Updating the Sin Spire Mod Loader", "Downloading " + release.Tag + "..."))
+            using (var form = new ProgressForm("Updating the " + App.Name, "Downloading " + release.Tag + "..."))
             {
                 string patch = null;
                 Exception failure = null;
@@ -243,13 +252,13 @@ namespace SinSpireModLoader
                 if (failure != null || patch == null)
                 {
                     string why = failure != null ? failure.Message : "The download was stopped.";
-                    game.Log("Mod loader update failed: " + why);
-                    MessageBox.Show(owner, "The update could not be downloaded: " + why + "\n\nThe game starts with the mod loader you have.",
-                        "Sin Spire mods", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    if (game != null) { game.Log("Update failed: " + why); }
+                    MessageBox.Show(owner, "The update could not be downloaded: " + why + "\n\nNothing was changed.",
+                        App.Name, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return false;
                 }
-                game.Log("Downloaded mod loader " + release.Tag + "; starting the update.");
-                StartUpdate(game, patch, thenArguments);
+                if (game != null) { game.Log("Downloaded " + release.Tag + "; starting the update."); }
+                StartUpdate(game, patch, thenArguments, appPath);
                 return true;
             }
         }
@@ -276,7 +285,7 @@ namespace SinSpireModLoader
                 AutoSize = true,
                 MaximumSize = new Size(440, 0),
                 Padding = new Padding(0, 0, 0, 10),
-                Text = "A new version of the Sin Spire Mod Loader is out: " + release.Tag + (release.Name != "" ? " (" + release.Name + ")" : "") + ".\n" +
+                Text = "A new version of the " + App.Name + " is out: " + release.Tag + (release.Name != "" ? " (" + release.Name + ")" : "") + ".\n" +
                        "You have " + (installed ?? "an older one") + ".\n\n" +
                        "Update downloads it (" + Updater.Megabytes(release.Size) + "), updates the loader and then starts the game. " +
                        "Your mods, their settings and your saves stay as they are.",

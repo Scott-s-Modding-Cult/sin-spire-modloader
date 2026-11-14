@@ -15,7 +15,7 @@ New-Item -ItemType Directory -Force "$fake\SinSpire\Binaries\Win64", "$fake\SinS
 Set-Content "$fake\SinSpire\Binaries\Win64\SinSpire-Win64-Shipping.exe" "fake"
 
 # The classes are internal, so they are reached through reflection.
-$launcher = [Reflection.Assembly]::LoadFile((Resolve-Path "$PSScriptRoot\..\build\launcher.exe").Path)
+$launcher = [Reflection.Assembly]::LoadFile((Resolve-Path "$PSScriptRoot\..\dist\SinSpire-ModManager.exe").Path)
 $importer = $launcher.GetType("SinSpireModLoader.Importer")
 $game = [Activator]::CreateInstance($launcher.GetType("SinSpireModLoader.GameFolder"), [object[]]@($fake))
 function Call($method) { $importer.GetMethod($method).Invoke($null, [object[]]@($args | ForEach-Object { $_.PSObject.BaseObject })) }
@@ -67,15 +67,15 @@ Check "repository lists mods" ($list.Count -gt 0)
 $small = $list | Sort-Object Size | Select-Object -First 1
 Call "Install" $game $small
 Check "downloaded mod installed" (Test-Path "$fake\Mods\$($small.Name)\mod.json")
-Check "download recorded" ((Call "Recorded" $game)[$small.Name] -eq $small.Sha)
 $broken = [Activator]::CreateInstance($small.GetType())
-$broken.Name = $small.Name; $broken.Url = $small.Url; $broken.Size = $small.Size; $broken.Sha = "0000"
+$broken.Name = $small.Name; $broken.Title = $small.Title; $broken.Version = $small.Version; $broken.Url = $small.Url; $broken.Size = $small.Size
+$broken.Sha256 = "0" * 64
 $refused = $false
 try { Call "Install" $game $broken } catch { $refused = $true }
 Check "damaged download refused" $refused
 
 # --- The window: the tab fills in by itself, and installing works through its buttons.
-$form = [Activator]::CreateInstance($launcher.GetType("SinSpireModLoader.ManagerForm"), [object[]]@($game))
+$form = [Activator]::CreateInstance($launcher.GetType("SinSpireModLoader.ManagerForm"), [object[]]@($game, $false))
 $form.StartPosition = "Manual"
 $form.Location = New-Object Drawing.Point(-3000, -3000)
 $form.Show()
@@ -93,10 +93,10 @@ Pump 5
 $rows = Find-Control $tabs.TabPages[1] ([Windows.Forms.ListView])
 Check "tab lists the mods" ($rows.Items.Count -eq $list.Count)
 $row = $rows.Items | Where-Object { $_.Tag.Name -eq $small.Name }
-Check "downloaded mod shows up to date" ($row.SubItems[3].Text -eq "Up to date")
+Check "downloaded mod shows up to date" ($row.SubItems[4].Text -eq "Up to date")
 $row.Selected = $true
 [Windows.Forms.Application]::DoEvents()
-$other = $rows.Items | Where-Object { $_.SubItems[3].Text -eq "Not installed" } | Sort-Object { $_.Tag.Size } | Select-Object -First 1
+$other = $rows.Items | Where-Object { $_.SubItems[4].Text -eq "Not installed" } | Sort-Object { $_.Tag.Size } | Select-Object -First 1
 Check "other mods show not installed" ($null -ne $other)
 $other.Selected = $true
 [Windows.Forms.Application]::DoEvents()
@@ -107,7 +107,7 @@ $button.PerformClick()
 Pump 6
 Check "button installs the mod" (Test-Path "$fake\Mods\$name\mod.json")
 $row = $rows.Items | Where-Object { $_.Tag.Name -eq $name }
-Check "row now shows up to date" ($row.SubItems[3].Text -eq "Up to date")
+Check "row now shows up to date" ($row.SubItems[4].Text -eq "Up to date")
 Check "button now offers reinstall" ($button.Text -eq "Reinstall")
 $checks = Find-Control $tabs.TabPages[0] ([Windows.Forms.CheckedListBox])
 Check "mods tab shows the new mod" ($checks.Items.Count -ge 3)
