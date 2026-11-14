@@ -2,7 +2,7 @@
 
 <a href="https://discord.gg/pjTY3jhbVz"><img src=".github/discord-banner.png" alt="Join Scott's Modding Cult on Discord" width="640"></a>
 
-A one-click patch and a small framework for modding Sin Spire, with a set of preset mods. Put each mod in one `Mods` folder, tick the ones you want, and play.
+The Sin Spire Mod Manager: one app that installs the mod loader, turns mods on and off, gets new ones and keeps itself up to date, plus a small framework for making mods. Put each mod in one `Mods` folder, tick the ones you want, and play.
 
 **You need your own copy of Sin Spire.** This repository does not include the game. Gooner DLC's pak (from the Get Mods tab) does include one mesh cut from the game's player model, as `CREDITS.txt` notes.
 
