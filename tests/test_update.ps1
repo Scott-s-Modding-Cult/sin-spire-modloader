@@ -1,5 +1,5 @@
 # The launcher's self-update on a fake game folder, against a releases list in a local file instead of GitHub.
-#   -NewerPatch  A patch built with build.ps1 -Tag patch-2099.01.01, which the list offers as the newest release.
+#   -NewerPatch  A patch built with scripts\build.ps1 -Tag patch-2099.01.01, which the list offers as the newest release.
 # No real game files are touched.
 param([Parameter(Mandatory)][string]$NewerPatch)
 $ErrorActionPreference = "Stop"
@@ -9,6 +9,10 @@ New-Item -ItemType Directory -Force $scratch | Out-Null
 $patch = "$PSScriptRoot\..\dist\SinSpire-ModLoader-Patch.exe"
 $fake = "$scratch\fake game"
 $script:failures = 0
+# The preset mods come from this repository's mods.json and zips, read as local files instead of from GitHub.
+$repo = Split-Path $PSScriptRoot
+$env:SINSPIRE_MODLOADER_TEST_MODS = ([Uri]"$repo\docs\mods\mods.json").AbsoluteUri
+$env:SINSPIRE_MODLOADER_TEST_ZIPS = ([Uri]"$repo\mods\").AbsoluteUri
 function Check($name, $ok) { if ($ok) { "ok    $name" } else { "FAIL  $name"; $script:failures++ } }
 function Installed { ((Get-Content "$fake\Mods\.modloader\install.txt") | Where-Object { $_ -like "patch=*" }) -replace "^patch=", "" }
 function Cached($key) { ((Get-Content "$fake\Mods\.modloader\update.txt") | Where-Object { $_ -like "$key=*" }) -replace "^$key=", "" }

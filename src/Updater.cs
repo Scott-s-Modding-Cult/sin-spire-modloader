@@ -278,7 +278,7 @@ namespace SinSpireModLoader
                 Padding = new Padding(0, 0, 0, 10),
                 Text = "A new version of the Sin Spire Mod Loader is out: " + release.Tag + (release.Name != "" ? " (" + release.Name + ")" : "") + ".\n" +
                        "You have " + (installed ?? "an older one") + ".\n\n" +
-                       "Update downloads it (" + Updater.Megabytes(release.Size) + "), updates the loader and its preset mods, and then starts the game. " +
+                       "Update downloads it (" + Updater.Megabytes(release.Size) + "), updates the loader and then starts the game. " +
                        "Your mods, their settings and your saves stay as they are.",
             };
             var update = new Button { Text = "Update", AutoSize = true, DialogResult = DialogResult.OK };

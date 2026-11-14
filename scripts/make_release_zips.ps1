@@ -5,19 +5,20 @@
 # refreshed. Run sync_mods.ps1 first.
 param(
     [string[]]$Mods = @("AdminPanel", "Backrooms", "MonitorSetting"),
-    [string]$GameDir = (Split-Path (Split-Path $PSScriptRoot)),
+    [string]$GameDir = (Split-Path (Split-Path (Split-Path $PSScriptRoot))),
     [switch]$InMods
 )
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$output = "$PSScriptRoot\dist\release"
+$repo = Split-Path $PSScriptRoot  # the repository: this script sits in its scripts folder
+$output = "$repo\dist\release"
 if ($InMods) {
-    $output = "$PSScriptRoot\mods"
+    $output = "$repo\mods"
     if (-not $PSBoundParameters.ContainsKey("Mods")) {
         $Mods = @(Get-ChildItem $output -Directory | ForEach-Object { $_.Name }) + "Backrooms"
     }
 }
-$stage = "$PSScriptRoot\build\release_stage"
+$stage = "$repo\build\release_stage"
 $personal = "settings.txt", "monitor.txt", "monitors.txt", "helper.log", "enabled.txt", "mod-randomizer.json", "boss-timer.txt", "controller-debug.log"
 
 # Only the zips being remade are cleared, as mods\ also holds the mods themselves.

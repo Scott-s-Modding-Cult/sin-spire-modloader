@@ -1,7 +1,7 @@
 @echo off
 rem Double-click to build dist\SinSpire-ModLoader-Patch.exe. --no-pause is for running this from a script.
 title Build Sin Spire Mod Loader Patch
-powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File "%~dp0build.ps1" -Pick
+powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File "%~dp0scripts\build.ps1" -Pick
 set result=%errorlevel%
 echo.
 if %result% neq 0 (

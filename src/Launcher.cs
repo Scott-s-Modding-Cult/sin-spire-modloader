@@ -221,10 +221,11 @@ namespace SinSpireModLoader
 
         Control BuildRepoPage()
         {
-            repoList.Columns.Add("Mod", 240);
-            repoList.Columns.Add("Installed", 90);
-            repoList.Columns.Add("Download", 90);
-            repoList.Columns.Add("Status", 150);
+            repoList.Columns.Add("Mod", 220);
+            repoList.Columns.Add("Installed", 80);
+            repoList.Columns.Add("Latest", 80);
+            repoList.Columns.Add("Download", 80);
+            repoList.Columns.Add("Status", 130);
             repoList.SelectedIndexChanged += (s, e) => UpdateInstallButton();
             install.Click += (s, e) => InstallSelected();
             recheck.Click += (s, e) => CheckRepo();
@@ -317,19 +318,19 @@ namespace SinSpireModLoader
         {
             if (repoList.SelectedItems.Count == 0) { return; }
             var mod = (RepoMod)repoList.SelectedItems[0].Tag;
-            SetBusy(true, "Downloading and installing " + mod.Name + "...");
+            SetBusy(true, "Downloading and installing " + mod.Title + "...");
             string message;
             try
             {
                 await Task.Run(() => Importer.Install(game, mod));
                 ReloadMods();
-                message = mod.Name + " is installed. It takes effect the next time the game starts.";
-                game.Log("Installed " + mod.Name + " from the repository, " + mod.Sha);
+                message = mod.Title + " " + mod.Version + " is installed. It takes effect the next time the game starts.";
+                game.Log("Installed " + mod.Name + " " + mod.Version + " from the mod list.");
             }
             catch (Exception error)
             {
                 game.Log("Could not install " + mod.Name + ": " + error);
-                message = "Could not install " + mod.Name + ": " + error.Message;
+                message = "Could not install " + mod.Title + ": " + error.Message;
             }
             FillRepo();
             SetBusy(false, message);
@@ -356,28 +357,20 @@ namespace SinSpireModLoader
             Fill(selected);
         }
 
-        static string RepoStatus(RepoMod mod, bool installed, Dictionary<string, string> recorded)
-        {
-            string sha;
-            if (!installed) { return "Not installed"; }
-            if (!recorded.TryGetValue(mod.Name, out sha)) { return "Installed"; } // Came with the patch, so its age is unknown.
-            return sha == mod.Sha ? "Up to date" : "Update available";
-        }
-
         void FillRepo()
         {
             string selected = repoList.SelectedItems.Count > 0 ? ((RepoMod)repoList.SelectedItems[0].Tag).Name : null;
-            Dictionary<string, string> recorded = Importer.Recorded(game);
             repoList.Items.Clear();
             foreach (RepoMod mod in repoMods)
             {
                 ModInfo local = mods.FirstOrDefault(m => m.Name.Equals(mod.Name, StringComparison.OrdinalIgnoreCase));
                 var item = new ListViewItem(new[]
                 {
-                    local != null ? local.Title : mod.Name,
+                    local != null ? local.Title : mod.Title,
                     local != null ? local.Version : "",
+                    mod.Version,
                     mod.Size < 1048576 ? string.Format("{0:0} KB", Math.Ceiling(mod.Size / 1024.0)) : string.Format("{0:0.0} MB", mod.Size / 1048576.0),
-                    RepoStatus(mod, local != null, recorded),
+                    Importer.Status(mod, local != null ? local.Version : null),
                 }) { Tag = mod };
                 repoList.Items.Add(item);
                 if (mod.Name == selected) { item.Selected = true; }
@@ -389,8 +382,10 @@ namespace SinSpireModLoader
         {
             install.Enabled = !busy && repoList.SelectedItems.Count > 0;
             if (repoList.SelectedItems.Count == 0) { return; }
-            string status = repoList.SelectedItems[0].SubItems[3].Text;
-            install.Text = status == "Not installed" ? "Install" : status == "Up to date" ? "Reinstall" : "Update";
+            string status = repoList.SelectedItems[0].SubItems[4].Text;
+            install.Text = status == Importer.NotInstalled ? "Install" : status == Importer.UpToDate ? "Reinstall" : "Update";
+            // A newer copy than the list's is the player's own: Get Mods never replaces it with an older one.
+            if (status == Importer.NewerInstalled) { install.Text = "Update"; install.Enabled = false; }
         }
 
         void Fill(int selected)

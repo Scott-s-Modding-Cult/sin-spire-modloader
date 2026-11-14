@@ -1,4 +1,7 @@
-// Installs and updates mods from the zips in this repository's mods folder, for the Mod Manager's Get Mods tab.
+// Installs and updates mods from the zips in this repository's mods folder. What there is comes from docs\mods\mods.json
+// on main, the list the mod browser shows: each mod's version, zip, size and SHA-256, and whether it is a preset.
+// The Mod Manager's Get Mods tab lists them and compares versions; the patch installs the presets once (InstallPresets),
+// so removing a mod from mods.json is all it takes to stop giving it out, and nothing installed is ever overwritten.
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -14,13 +17,20 @@ namespace SinSpireModLoader
 {
     class RepoMod
     {
-        public string Name, Sha, Url;
+        public string Name, Title, Version, Url, Sha256;
         public long Size;
+        public bool Preset;
     }
 
     static class Importer
     {
-        const string ListUrl = "https://api.github.com/repos/Scott-s-Modding-Cult/sin-spire-modloader/contents/mods?ref=main";
+        // Plain files, not GitHub's API, which allows few requests without signing in.
+        const string Raw = "https://raw.githubusercontent.com/Scott-s-Modding-Cult/sin-spire-modloader/main/";
+        const string ListUrl = Raw + "docs/mods/mods.json";
+        const string ZipUrl = Raw + "mods/";
+        // For tests: another mods.json and another folder for the zips (file:// addresses work).
+        const string ListVariable = "SINSPIRE_MODLOADER_TEST_MODS";
+        const string ZipVariable = "SINSPIRE_MODLOADER_TEST_ZIPS";
 
         // Each player's own files, which an update keeps. Everything else in the old folder is replaced.
         static readonly string[] PersonalFiles = { "settings.txt", "monitor.txt", "monitors.txt", "helper.log", "mod-randomizer.json", "boss-timer.txt" };
@@ -28,7 +38,8 @@ namespace SinSpireModLoader
 
         static string ImportDir(GameFolder game) { return Path.Combine(game.State, "import"); }
         static string BackupDir(GameFolder game) { return Path.Combine(game.State, "backup"); }
-        static string RecordFile(GameFolder game) { return Path.Combine(game.State, "imports.txt"); }
+        // The presets the patch has given this game, installed or not, so one the player removed is not put back.
+        static string PresetRecord(GameFolder game) { return Path.Combine(game.State, "presets.txt"); }
 
         static WebClient NewClient()
         {
@@ -39,51 +50,66 @@ namespace SinSpireModLoader
             return client;
         }
 
+        static object Value(Dictionary<string, object> data, string key) { object value; return data.TryGetValue(key, out value) ? value : null; }
+        static string Text(Dictionary<string, object> data, string key) { return Value(data, key) as string ?? ""; }
+
+        // Every mod in mods.json that has a zip and a checksum.
         public static List<RepoMod> List()
         {
             string text;
-            using (WebClient client = NewClient()) { text = client.DownloadString(ListUrl); }
+            using (WebClient client = NewClient()) { text = client.DownloadString(Environment.GetEnvironmentVariable(ListVariable) ?? ListUrl); }
+            var list = new JavaScriptSerializer { MaxJsonLength = int.MaxValue }.DeserializeObject(text) as Dictionary<string, object>;
+            if (list == null || !(Value(list, "mods") is object[])) { throw new InvalidDataException("The list of mods could not be read."); }
+            string zips = Environment.GetEnvironmentVariable(ZipVariable) ?? ZipUrl;
             var mods = new List<RepoMod>();
-            foreach (Dictionary<string, object> entry in new JavaScriptSerializer().Deserialize<List<Dictionary<string, object>>>(text))
+            foreach (Dictionary<string, object> entry in ((object[])list["mods"]).OfType<Dictionary<string, object>>())
             {
-                string file = (string)entry["name"];
-                if ((string)entry["type"] != "file" || !ZipName.IsMatch(file)) { continue; }
+                string file = Text(entry, "zip"), name = Text(entry, "id"), sha = Text(entry, "sha256");
+                if (!ZipName.IsMatch(file) || !string.Equals(file, name + ".zip", StringComparison.OrdinalIgnoreCase) || sha.Length != 64) { continue; }
                 mods.Add(new RepoMod
                 {
-                    Name = Path.GetFileNameWithoutExtension(file),
-                    Sha = (string)entry["sha"],
-                    Url = (string)entry["download_url"],
-                    Size = Convert.ToInt64(entry["size"]),
+                    Name = name,
+                    Title = Text(entry, "title") != "" ? Text(entry, "title") : name,
+                    Version = Text(entry, "version"),
+                    Url = zips + file,
+                    Sha256 = sha.ToUpperInvariant(),
+                    Size = Convert.ToInt64(Value(entry, "bytes") ?? 0),
+                    Preset = true.Equals(Value(entry, "preset")),
                 });
             }
-            return mods.OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase).ToList();
+            return mods.OrderBy(m => m.Title, StringComparer.OrdinalIgnoreCase).ToList();
         }
 
-        // Which download each mod came from. Presets from the patch are not listed, so their age is unknown.
-        public static Dictionary<string, string> Recorded(GameFolder game)
+        // Compares versions number by number, so 1.10.0 is newer than 1.9.0. Below zero when a is older.
+        public static int CompareVersions(string a, string b)
         {
-            var recorded = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            if (File.Exists(RecordFile(game)))
+            string[] x = (a ?? "").Split('.', '-', '+'), y = (b ?? "").Split('.', '-', '+');
+            for (int i = 0; i < Math.Max(x.Length, y.Length); i++)
             {
-                foreach (string line in File.ReadAllLines(RecordFile(game)))
-                {
-                    int equals = line.IndexOf('=');
-                    if (equals > 0) { recorded[line.Substring(0, equals)] = line.Substring(equals + 1); }
-                }
+                string p = i < x.Length ? x[i] : "0", q = i < y.Length ? y[i] : "0";
+                long m, n;
+                int order = long.TryParse(p, out m) && long.TryParse(q, out n) ? m.CompareTo(n) : string.CompareOrdinal(p, q);
+                if (order != 0) { return Math.Sign(order); }
             }
-            return recorded;
+            return 0;
         }
 
-        // The hash GitHub lists for a file, so a broken download is caught before anything is replaced.
-        public static string BlobSha(string path)
+        public const string NotInstalled = "Not installed", UpToDate = "Up to date", UpdateAvailable = "Update available", NewerInstalled = "Newer installed";
+
+        // Where the installed copy stands against the listed one. A newer installed copy is never replaced from here.
+        public static string Status(RepoMod mod, string installedVersion)
         {
-            byte[] data = File.ReadAllBytes(path);
-            byte[] header = Encoding.ASCII.GetBytes("blob " + data.Length + "\0");
-            using (SHA1 sha = SHA1.Create())
+            if (installedVersion == null) { return NotInstalled; }
+            int order = CompareVersions(mod.Version, installedVersion);
+            return order > 0 ? UpdateAvailable : order == 0 ? UpToDate : NewerInstalled;
+        }
+
+        static string Sha256(string path)
+        {
+            using (Stream stream = File.OpenRead(path))
+            using (SHA256 sha = SHA256.Create())
             {
-                sha.TransformBlock(header, 0, header.Length, null, 0);
-                sha.TransformFinalBlock(data, 0, data.Length);
-                return string.Concat(sha.Hash.Select(b => b.ToString("x2")));
+                return BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", "");
             }
         }
 
@@ -95,16 +121,63 @@ namespace SinSpireModLoader
             try
             {
                 using (WebClient client = NewClient()) { client.DownloadFile(mod.Url, zip); }
-                if (BlobSha(zip) != mod.Sha) { throw new InvalidDataException("The download of " + mod.Name + " was damaged. Nothing was changed."); }
+                // Checked against mods.json, so a broken download is caught before anything is replaced.
+                if (new FileInfo(zip).Length != mod.Size || Sha256(zip) != mod.Sha256)
+                {
+                    throw new InvalidDataException("The download of " + mod.Title + " didn't match the mod list. Nothing was changed.");
+                }
                 InstallZip(game, mod.Name, zip);
-                Dictionary<string, string> recorded = Recorded(game);
-                recorded[mod.Name] = mod.Sha;
-                File.WriteAllLines(RecordFile(game), recorded.Select(p => p.Key + "=" + p.Value));
             }
             finally
             {
-                File.Delete(zip);
+                if (File.Exists(zip)) { File.Delete(zip); }
             }
+        }
+
+        // The patch gives each preset in mods.json once: installed if its folder isn't there, then remembered, so a preset the
+        // player removed stays removed and an installed copy, older or newer, is left as it is (Get Mods updates it).
+        // A game patched by a patch that carried the presets itself (hadBundledPresets) counts every preset as given, so
+        // nothing removed comes back.
+        // Without the internet it says so and carries on: the loader works, and Get Mods can install them later.
+        public static void InstallPresets(GameFolder game, bool hadBundledPresets, Action<string> say)
+        {
+            List<RepoMod> presets;
+            try
+            {
+                presets = List().Where(m => m.Preset).ToList();
+            }
+            catch (Exception error)
+            {
+                say("Could not get the preset mods (" + error.Message + "). The Mod Manager's Get Mods tab can install them later.");
+                return;
+            }
+            string record = PresetRecord(game);
+            var given = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (File.Exists(record)) { given.UnionWith(File.ReadAllLines(record).Select(l => l.Trim()).Where(l => l != "")); }
+            else if (hadBundledPresets) { given.UnionWith(presets.Select(m => m.Name)); }
+            int added = 0;
+            foreach (RepoMod mod in presets)
+            {
+                if (given.Contains(mod.Name)) { continue; }
+                if (!Directory.Exists(Path.Combine(game.Mods, mod.Name)))
+                {
+                    try
+                    {
+                        Install(game, mod);
+                        say("Installed " + mod.Title + " " + mod.Version + ".");
+                        added++;
+                    }
+                    catch (Exception error)
+                    {
+                        say("Could not install " + mod.Title + ": " + error.Message + " Get Mods can install it later.");
+                        continue; // not remembered, so the next patch tries again
+                    }
+                }
+                given.Add(mod.Name);
+            }
+            Directory.CreateDirectory(game.State);
+            File.WriteAllLines(record, given.OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
+            say(added > 0 ? "Added " + added + " preset mods to the Mods folder." : "No preset mods to add; the ones you have are left as they are.");
         }
 
         // Unpacks beside the mods first, so a bad zip leaves the installed mod alone, then swaps the folders.

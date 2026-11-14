@@ -6,6 +6,10 @@ $fake = "$scratch\fake game"
 $script:failures = 0
 # The launcher checks for mod loader updates after starting the game: point it at nothing instead of GitHub.
 $env:SINSPIRE_MODLOADER_TEST_API = ([Uri]"$scratch\no-releases.json").AbsoluteUri
+# The preset mods come from this repository's mods.json and zips, read as local files instead of from GitHub.
+$repo = Split-Path $PSScriptRoot
+$env:SINSPIRE_MODLOADER_TEST_MODS = ([Uri]"$repo\docs\mods\mods.json").AbsoluteUri
+$env:SINSPIRE_MODLOADER_TEST_ZIPS = ([Uri]"$repo\mods\").AbsoluteUri
 function Check($name, $ok) { if ($ok) { "ok    $name" } else { "FAIL  $name"; $script:failures++ } }
 function Run-Patch($mode) { (Start-Process $patch -ArgumentList $mode, "`"$fake`"" -Wait -PassThru).ExitCode }
 function Launch {
@@ -43,6 +47,7 @@ Check "no log in payload" (-not (Test-Path "$win64\ue4ss\UE4SS.log"))
 $realFolders = Get-ChildItem "$win64\ue4ss\Mods" -Directory | Where-Object { $_.Attributes -notmatch "ReparsePoint" }
 Check "only UE4SS's own mods are real folders" ($realFolders.Count -eq 9)
 Check "preset installed" (Test-Path "$fake\Mods\AdminPanel\Scripts\main.lua")
+Check "presets came from mods.json" ((Get-Content "$fake\Mods\.modloader\modloader.log" -Raw) -match "Installed Admin Panel")
 Check "credits installed" (Test-Path "$fake\Mods\CREDITS.txt")
 Check "preset pak linked" (Test-Path "$fake\SinSpire\Content\Paks\~mods\SinSpire-CrabPair_P.pak")
 Check "preset on by default is running" ((Get-Content "$win64\ue4ss\Mods\mods.txt") -contains "AdminPanel : 1")
@@ -76,6 +81,22 @@ Check "mods.txt lists enabled mod" ($txt -contains "OldOn : 1")
 Check "mods.txt omits disabled mod" (-not ($txt -match "OldOff"))
 Check "mods.txt keeps builtin flags" ($txt -contains "SplitScreenMod : 0")
 Check "Keybinds stays last" ($txt[-1] -eq "Keybinds : 1")
+
+# --- Each preset is given once: one the player removed stays removed, and an installed copy is never replaced.
+cmd /c rmdir /s /q "`"$fake\Mods\CrabPair`""
+$adminJson = "$fake\Mods\AdminPanel\mod.json"
+(Get-Content $adminJson -Raw) -replace '"version":\s*"[^"]*"', '"version": "9.9.9"' | Set-Content $adminJson
+"Exit: " + (Run-Patch "--patch")
+Check "removed preset not put back" (-not (Test-Path "$fake\Mods\CrabPair"))
+Check "newer installed preset left alone" ((Get-Content $adminJson -Raw) -match '9\.9\.9')
+Check "given presets remembered" ((Get-Content "$fake\Mods\.modloader\presets.txt") -contains "CrabPair")
+# A game last patched by a patch that carried the presets itself: one missing now was removed on purpose.
+Remove-Item "$fake\Mods\.modloader\presets.txt"
+cmd /c rmdir /s /q "`"$fake\Mods\GhostKiss`""
+(Get-Content "$fake\Mods\.modloader\install.txt") -replace '^patch=.*', 'patch=patch-2026.11.14' | Set-Content "$fake\Mods\.modloader\install.txt"
+"Exit: " + (Run-Patch "--patch")
+Check "older patch's game: missing preset not added" (-not (Test-Path "$fake\Mods\GhostKiss"))
+Check "older patch's game: presets remembered" ((Get-Content "$fake\Mods\.modloader\presets.txt") -contains "GhostKiss")
 
 # --- The launcher deploys, passes arguments on, and honours order, needs and manifests.
 New-Item -ItemType Directory -Force "$fake\Mods\NeedsIt\Scripts", "$fake\Mods\Base\Scripts", "$fake\Mods\Broken\Scripts", "$fake\Mods\Orphan\Scripts" | Out-Null
@@ -233,6 +254,22 @@ Check "older patch's UE4SS updated" (Is-Bundled)
 Check "nothing kept of the patch's own UE4SS" (-not (Test-Path "$fake\Mods\.modloader\ue4ss_before_patch"))
 "Exit: " + (Run-Patch "--unpatch")
 Check "patch's UE4SS removed" (-not (Test-Path "$win64\ue4ss") -and -not (Test-Path "$win64\dwmapi.dll"))
+
+# --- Offline: the loader installs anyway, and the presets come with the next patch that can reach the list.
+$offline = "$scratch\offline game"
+if (Test-Path $offline) { cmd /c rmdir /s /q "`"$offline`"" }
+New-Item -ItemType Directory -Force "$offline\SinSpire\Binaries\Win64", "$offline\SinSpire\Content\Paks" | Out-Null
+Copy-Item "$fake\SinSpire.exe" "$offline\SinSpire.exe"
+Set-Content "$offline\SinSpire\Binaries\Win64\SinSpire-Win64-Shipping.exe" "fake"
+$listed = $env:SINSPIRE_MODLOADER_TEST_MODS
+$env:SINSPIRE_MODLOADER_TEST_MODS = ([Uri]"$scratch\no-mods.json").AbsoluteUri
+$code = (Start-Process $patch -ArgumentList "--patch", "`"$offline`"" -Wait -PassThru).ExitCode
+Check "offline: patch still works" ($code -eq 0 -and (Test-Path "$offline\SinSpire-Original.exe") -and (Test-Path "$offline\Mods\ModKit\mod.json"))
+Check "offline: says the presets come later" ((Get-Content "$offline\Mods\.modloader\modloader.log" -Raw) -match "Could not get the preset mods")
+Check "offline: no presets" (-not (Test-Path "$offline\Mods\AdminPanel"))
+$env:SINSPIRE_MODLOADER_TEST_MODS = $listed
+(Start-Process $patch -ArgumentList "--patch", "`"$offline`"" -Wait -PassThru).ExitCode | Out-Null
+Check "online again: presets installed" ((Test-Path "$offline\Mods\AdminPanel\mod.json") -and (Test-Path "$offline\Mods\GhostKiss\mod.json"))
 
 "--- log"; Get-Content "$fake\Mods\.modloader\modloader.log" | Select-Object -Last 8
 "Failures: $script:failures"

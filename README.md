@@ -12,7 +12,7 @@ A one-click patch and a small framework for modding Sin Spire, with a set of pre
 
 ## Preset mods
 
-The mods in `mods\` come with the patch and appear in the Mod Manager, where each can be turned on or off.
+The mods marked `preset` in `docs\mods\mods.json` are installed by the patch the first time it patches a game, straight from their zips in `mods\` on GitHub, and appear in the Mod Manager, where each can be turned on or off. The patch itself carries no mods. It gives each preset only once: one you remove stays removed, and a copy you already have, older or newer, is left as it is. A game first patched without internet gets them the next time the patch runs online, or from Get Mods. Taking a mod out of `mods.json` stops it being given out.
 
 | Mod | What it does | Keys |
 | --- | --- | --- |
@@ -23,13 +23,13 @@ The mods in `mods\` come with the patch and appear in the Mod Manager, where eac
 | Monitor Setting | Adds a Monitor row to the video settings | |
 | Plant Distractor | Plant pair distraction placed in each level, with a volume slider | |
 
-These mods are adult content. `sync_mods.ps1` refreshes `mods\` from a game's `Mods` folder. It leaves out personal settings.
+These mods are adult content. `scripts\sync_mods.ps1` refreshes `mods\` from a game's `Mods` folder. It leaves out personal settings.
 
-`mods\` also holds a zip of each of these mods, to unpack straight into a game's `Mods` folder. `make_release_zips.ps1 -InMods` remakes them.
+`mods\` also holds a zip of each of these mods, to unpack straight into a game's `Mods` folder. `scripts\make_release_zips.ps1 -InMods` remakes them.
 
-The [mod browser](https://scott-s-modding-cult.github.io/sin-spire-modloader/mods/) reads `docs\mods\mods.json`. `update_mod_browser.ps1` fills in each mod's version, size, keys and requirements there, and both scripts above run it. Each mod's icon, category, summary and details are written by hand in that file. The script warns about any mod that is new or whose zip has changed, until its text has been checked and its `stamp` copied to `checked`.
+The [mod browser](https://scott-s-modding-cult.github.io/sin-spire-modloader/mods/) and the Mod Manager both read `docs\mods\mods.json`. `scripts\update_mod_browser.ps1` fills in each mod's version (from its zip), size, SHA-256, keys and requirements there, and both scripts above run it. Each mod's icon, category, summary and details are written by hand in that file. The script warns about any mod that is new or whose zip has changed, until its text has been checked and its `stamp` copied to `checked`.
 
-The Mod Manager's **Get Mods** tab installs and updates mods from those zips. An update replaces the mod's folder and keeps your settings, and the old version is saved in `Mods\.modloader\backup`. A mod that came with the patch shows as Installed until it is updated once, because its age is not known until then.
+The Mod Manager's **Get Mods** tab lists every mod in `mods.json` with a zip, with the installed and the latest version, and installs and updates them from those zips, checking each download against its SHA-256. An update replaces the mod's folder and keeps your settings, and the old version is saved in `Mods\.modloader\backup`. A copy newer than the listed one shows as Newer installed and is never replaced with the older one.
 
 ## Building the patch
 
@@ -42,7 +42,7 @@ It looks for UE4SS in a `ue4ss_files` folder beside the script, then in any Stea
 To choose the folders yourself, run the script directly:
 
 ```powershell
-.\build.ps1 -GameDir "D:\SteamLibrary\steamapps\common\Sin Spire" -Ue4ssDir "C:\path\to\folder\with\dwmapi.dll"
+.\scripts\build.ps1 -GameDir "D:\SteamLibrary\steamapps\common\Sin Spire" -Ue4ssDir "C:\path\to\folder\with\dwmapi.dll"
 ```
 
 ## Patching the game
@@ -164,7 +164,7 @@ The loader and its preset mods are free. If you'd like to chip in, you can donat
 
 ## Mod downloads
 
-Some mods are also on the [Releases page](https://github.com/Scott-s-Modding-Cult/sin-spire-modloader/releases) as zips. Backrooms is too big to keep unzipped in this repository, so it does not come with the patch, but `mods\Backrooms.zip` holds the latest version, and the Mod Manager's Get Mods tab installs it. With the patch installed, unzip one into the game's `Mods` folder and it appears in the Mod Manager. `make_release_zips.ps1` makes the zips.
+Some mods are also on the [Releases page](https://github.com/Scott-s-Modding-Cult/sin-spire-modloader/releases) as zips. Backrooms is too big to keep unzipped in this repository, so it does not come with the patch, but `mods\Backrooms.zip` holds the latest version, and the Mod Manager's Get Mods tab installs it. With the patch installed, unzip one into the game's `Mods` folder and it appears in the Mod Manager. `scripts\make_release_zips.ps1` makes the zips.
 
 ## Credits
 

@@ -28,6 +28,7 @@ namespace SinSpireModLoader
     static class Patch
     {
         const string LoaderProduct = "SinSpire Mod Loader";
+        const string LastPatchWithPresets = "patch-2026.11.14";
         const long OldMonitorLauncherSize = 6656; // The launcher used before this one has no product name to check.
         const string ManagerBat = "Mod Manager.bat";
         static readonly HashSet<string> Ue4ssOwnMods = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -42,7 +43,7 @@ namespace SinSpireModLoader
             return Assembly.GetExecutingAssembly().GetManifestResourceStream(name);
         }
 
-        // The release this patch is, such as patch-2026.11.14, written in by build.ps1. The launcher compares it with
+        // The release this patch is, such as patch-2026.11.14, written in by scripts\build.ps1. The launcher compares it with
         // GitHub's newest to offer updates.
         public static string Tag
         {
@@ -368,6 +369,11 @@ namespace SinSpireModLoader
             if (!game.LooksLikeTheGame) { throw new IOException(game.Root + " does not look like a Sin Spire folder."); }
             if (game.GameIsRunning()) { throw new IOException("Close the game first."); }
             Directory.CreateDirectory(game.State);
+            // Patches up to patch-2026.11.14 carried the preset mods and put them all in; later ones install them from
+            // mods.json. A game patched by one of those already had every preset, so one missing now was removed on purpose.
+            string earlierTag = Updater.InstalledTag(game);
+            bool patchedBefore = File.Exists(game.InstallInfo) || File.Exists(game.OriginalExe) || IsLauncher(game.Exe);
+            bool hadBundledPresets = patchedBefore && (earlierTag == null || string.CompareOrdinal(earlierTag, LastPatchWithPresets) <= 0);
             Deployer.Undeploy(game);
             bool addedUe4ss = InstallUe4ss(game, say);
             if (!addedUe4ss && File.Exists(game.InstallInfo)) { addedUe4ss = File.ReadAllText(game.InstallInfo).Contains("ue4ss_added=1"); }
@@ -378,10 +384,14 @@ namespace SinSpireModLoader
             BringModsFromBesideThePatch(game, say);
             AdoptInstalledMods(game, say);
 
-            // Comes after adopting, so an installed copy of a preset is moved in first. A file only gets replaced when
-            // the patch's copy is newer, so a mod rebuilt locally and a player's settings both survive.
-            ExtractZip("presets.zip", game.Mods, Replace.WhenNewer);
-            say("Added the preset mods to the Mods folder.");
+            // The credits for the assets the preset mods use.
+            using (Stream from = Resource("CREDITS.txt"))
+            using (Stream to = File.Create(Path.Combine(game.Mods, "CREDITS.txt")))
+            {
+                from.CopyTo(to);
+            }
+            // Comes after adopting, so an installed copy of a preset is moved in first and left as it is.
+            Importer.InstallPresets(game, hadBundledPresets, say);
 
             InstallLauncher(game, say);
             File.WriteAllText(Path.Combine(game.Root, ManagerBat), "@start \"\" \"%~dp0SinSpire.exe\" -modmanager\r\n");
