@@ -203,7 +203,15 @@ local function hold_still(ghost)
         if ghost.Controller.BrainComponent:IsValid() then
             ghost.Controller.BrainComponent:StopLogic("GhostKiss")
         end
+        -- Stopping the brain keeps the focus it had (often the player), and the controller goes on turning the ghost to
+        -- face it, which turned kissing ghosts away from each other and towards the player.
+        pcall(function() ghost.Controller:K2_ClearFocus() end)
     end
+    -- Nor does the controller's rotation turn it while held; the pair's facing is the only one that counts.
+    pcall(function()
+        saved.use_yaw = ghost.bUseControllerRotationYaw
+        ghost.bUseControllerRotationYaw = false
+    end)
     if ghost.AIPerception:IsValid() then
         ghost.AIPerception:Deactivate()
     end
@@ -262,6 +270,9 @@ local function release(ghost, saved)
     set_trace_only(ghost, saved, false)
     ghost.Mesh:SetAnimationMode(0, true)
     ghost:SetActorEnableCollision(true)
+    if saved.use_yaw ~= nil then
+        pcall(function() ghost.bUseControllerRotationYaw = saved.use_yaw end)
+    end
     -- A ghost spawned this frame has not started moving yet, so it has no mode to go back to.
     ghost.CharacterMovement:SetMovementMode(saved.mode ~= MOVEMENT_NONE and saved.mode or MOVEMENT_WALKING, 0)
     if ghost.AIPerception:IsValid() then
@@ -428,6 +439,8 @@ local function begin_pair(a, b, centre, yaw, anim, options)
     place(b, { X = centre.X + dir_x * half, Y = centre.Y + dir_y * half, Z = centre.Z }, yaw + 180.0)
     a.Mesh:PlayAnimation(anim, true)
     b.Mesh:PlayAnimation(anim, true)
+    -- The facing each was given, which keep_facing puts back if anything turns them.
+    pair.face = { a = a:K2_GetActorRotation().Yaw, b = b:K2_GetActorRotation().Yaw }
     pair.dir_x, pair.dir_y = dir_x, dir_y
     pair.mouth = { X = centre.X, Y = centre.Y, Z = centre.Z + MOUTH_HEIGHT_CM * scale.Z }
     table.insert(active_pairs, pair)
@@ -488,6 +501,31 @@ local function was_hurt(ghost, saved)
     return ghost.BPC_HealthComponent.CurrentHealth < saved.health
 end
 
+-- Turns a kissing ghost back to the facing the pair gave it. Turning about its own pivot puts its mesh back where the
+-- pair placed it too, as only the rotation changed. Its controller is turned with it, so the two don't fight.
+local FACE_TOLERANCE_DEG = 1.0
+local turned_logged = {}
+local function keep_facing(ghost, yaw)
+    if not yaw then
+        return
+    end
+    local now = ghost:K2_GetActorRotation()
+    if math.abs((now.Yaw - yaw + 180.0) % 360.0 - 180.0) <= FACE_TOLERANCE_DEG and math.abs(now.Pitch) <= FACE_TOLERANCE_DEG then
+        return
+    end
+    local address = ghost:GetAddress()
+    if not turned_logged[address] then
+        turned_logged[address] = true
+        log(string.format("Turned a kissing ghost back to its partner (it had turned %.0f degrees)",
+            math.abs((now.Yaw - yaw + 180.0) % 360.0 - 180.0)))
+    end
+    ghost:K2_SetActorRotation({ Pitch = 0, Yaw = yaw, Roll = 0 }, true)
+    if ghost.Controller:IsValid() then
+        pcall(function() ghost.Controller:K2_ClearFocus() end)
+        ghost.Controller:SetControlRotation({ Pitch = 0, Yaw = yaw, Roll = 0 })
+    end
+end
+
 local function watch_pairs(live)
     local player = current_player()
     local radius_squared = DETECTION_RADIUS_CM * DETECTION_RADIUS_CM
@@ -500,6 +538,10 @@ local function watch_pairs(live)
         elseif was_hurt(a, pair.saved_a) or was_hurt(b, pair.saved_b) then
             wake_pair(pair, live, "a ghost was hurt")
         else
+            if pair.face then
+                keep_facing(a, pair.face.a)
+                keep_facing(b, pair.face.b)
+            end
             set_prompt(a, pair.saved_a, true)
             set_prompt(b, pair.saved_b, true)
             if not pair.traceable then

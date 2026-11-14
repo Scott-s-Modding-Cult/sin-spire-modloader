@@ -18,7 +18,7 @@ if ($InMods) {
     }
 }
 $stage = "$PSScriptRoot\build\release_stage"
-$personal = "settings.txt", "monitor.txt", "monitors.txt", "helper.log", "enabled.txt", "mod-randomizer.json", "controller-debug.log"
+$personal = "settings.txt", "monitor.txt", "monitors.txt", "helper.log", "enabled.txt", "mod-randomizer.json", "boss-timer.txt", "controller-debug.log"
 
 # Only the zips being remade are cleared, as mods\ also holds the mods themselves.
 foreach ($mod in $Mods) {
