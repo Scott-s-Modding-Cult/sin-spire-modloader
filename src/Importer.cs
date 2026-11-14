@@ -23,7 +23,7 @@ namespace SinSpireModLoader
         const string ListUrl = "https://api.github.com/repos/Scott-s-Modding-Cult/sin-spire-modloader/contents/mods?ref=main";
 
         // Each player's own files, which an update keeps. Everything else in the old folder is replaced.
-        static readonly string[] PersonalFiles = { "settings.txt", "monitor.txt", "monitors.txt", "helper.log", "mod-randomizer.json" };
+        static readonly string[] PersonalFiles = { "settings.txt", "monitor.txt", "monitors.txt", "helper.log", "mod-randomizer.json", "boss-timer.txt" };
         static readonly Regex ZipName = new Regex(@"^[A-Za-z0-9_-]+\.zip$");
 
         static string ImportDir(GameFolder game) { return Path.Combine(game.State, "import"); }

@@ -40,12 +40,14 @@ Set-Content "$mod\Scripts\main.lua" "old"
 Set-Content "$mod\Scripts\removed.lua" "old"
 Set-Content "$mod\settings.txt" "keep=1"
 Set-Content "$mod\mod-randomizer.json" "keep=2"
+Set-Content "$mod\boss-timer.txt" "off"
 Make-Zip "$scratch\Thing.zip" @("Thing/mod.json", "Thing/Scripts/main.lua")
 Check "update installs" (Install-Zip "Thing" "$scratch\Thing.zip")
 Check "new file in place" ((Get-Content "$mod\Scripts\main.lua") -eq "new")
 Check "file no longer in the mod is gone" (-not (Test-Path "$mod\Scripts\removed.lua"))
 Check "settings kept" ((Get-Content "$mod\settings.txt") -eq "keep=1")
 Check "randomizer settings kept" ((Get-Content "$mod\mod-randomizer.json") -eq "keep=2")
+Check "boss timer setting kept" ((Get-Content "$mod\boss-timer.txt") -eq "off")
 Check "old version backed up" ((Get-Content "$fake\Mods\.modloader\backup\Thing\Scripts\main.lua") -eq "old")
 Check "import folder cleaned" (-not (Test-Path "$fake\Mods\.modloader\import\Thing"))
 
