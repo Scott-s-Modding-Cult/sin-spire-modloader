@@ -149,6 +149,8 @@ namespace SinSpireModLoader
         readonly Button close = new Button { Text = "Save and Close", AutoSize = true };
         readonly Label loaderStatus = new Label { AutoSize = true, Anchor = AnchorStyles.Left, Padding = new Padding(0, 6, 0, 6) };
         readonly Button updateLoader = new Button { Text = "Update Mod Loader", AutoSize = true, Visible = false };
+        // Hover help for every button. A disabled button shows none, so the Get Mods rows explain their own state too.
+        readonly ToolTip tips = new ToolTip { AutoPopDelay = 20000, InitialDelay = 400, ReshowDelay = 100 };
         PatchRelease loaderRelease;
         List<RepoMod> repoMods = new List<RepoMod>();
         bool repoChecked, busy;
@@ -179,6 +181,12 @@ namespace SinSpireModLoader
             close.Click += (s, e) => { Registry.Save(game, mods); Close(); };
             list.ItemCheck += ListItemCheck;
             list.SelectedIndexChanged += (s, e) => ShowDetails();
+            tips.SetToolTip(up, "Load the selected mod earlier. Mods load from the top of the list down.");
+            tips.SetToolTip(down, "Load the selected mod later. Mods load from the top of the list down.");
+            tips.SetToolTip(folder, "Open the game's Mods folder. A mod's folder put there shows up in this list.");
+            tips.SetToolTip(play, "Save the ticks and the order, then start the game.");
+            tips.SetToolTip(close, "Save the ticks and the order, then close without starting the game.");
+            tips.SetToolTip(list, "Tick a mod to load it, untick it to leave it out. Its files stay in the Mods folder either way.");
 
             var left = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
             left.Controls.AddRange(new Control[] { up, down, folder });
@@ -230,6 +238,10 @@ namespace SinSpireModLoader
             install.Click += (s, e) => InstallSelected();
             recheck.Click += (s, e) => CheckRepo();
             updateLoader.Click += (s, e) => UpdateLoader();
+            repoList.ShowItemToolTips = true;
+            tips.SetToolTip(recheck, "Read the mod list again and check for a new version of the Mod Loader.");
+            tips.SetToolTip(updateLoader, "Download the new Mod Loader, update it, and open this window again. Your mods, their settings and your saves stay as they are.");
+            tips.SetToolTip(install, "Select a mod in the list first.");
             loaderRelease = Updater.Pending(game); // what the last check found, until this tab checks again
             ShowLoader();
 
@@ -371,11 +383,22 @@ namespace SinSpireModLoader
                     mod.Version,
                     mod.Size < 1048576 ? string.Format("{0:0} KB", Math.Ceiling(mod.Size / 1024.0)) : string.Format("{0:0.0} MB", mod.Size / 1048576.0),
                     Importer.Status(mod, local != null ? local.Version : null),
-                }) { Tag = mod };
+                }) { Tag = mod, ToolTipText = StatusHelp(mod, local) };
                 repoList.Items.Add(item);
                 if (mod.Name == selected) { item.Selected = true; }
             }
             UpdateInstallButton();
+        }
+
+        static string StatusHelp(RepoMod mod, ModInfo local)
+        {
+            switch (Importer.Status(mod, local != null ? local.Version : null))
+            {
+                case Importer.NotInstalled: return mod.Title + " is not installed. Select it and click Install.";
+                case Importer.UpToDate: return "You have the latest version, " + mod.Version + ". Reinstall downloads it again if its files were changed or damaged.";
+                case Importer.UpdateAvailable: return "Version " + mod.Version + " is out; you have " + local.Version + ". Select it and click Update.";
+                default: return "You have version " + local.Version + ", newer than the list's " + mod.Version + ", so Get Mods leaves it as it is.";
+            }
         }
 
         void UpdateInstallButton()
@@ -384,6 +407,10 @@ namespace SinSpireModLoader
             if (repoList.SelectedItems.Count == 0) { return; }
             string status = repoList.SelectedItems[0].SubItems[4].Text;
             install.Text = status == Importer.NotInstalled ? "Install" : status == Importer.UpToDate ? "Reinstall" : "Update";
+            tips.SetToolTip(install,
+                status == Importer.NotInstalled ? "Download and install the selected mod. It takes effect the next time the game starts."
+                : status == Importer.UpToDate ? "Download the same version again, for example if its files were changed or damaged. Its settings are kept."
+                : "Download the newer version. Its settings are kept, and the old version is saved in Mods\\.modloader\\backup.");
             // A newer copy than the list's is the player's own: Get Mods never replaces it with an older one.
             if (status == Importer.NewerInstalled) { install.Text = "Update"; install.Enabled = false; }
         }

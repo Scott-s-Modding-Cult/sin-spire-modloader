@@ -540,6 +540,10 @@ namespace SinSpireModLoader
             browse.Click += (s, e) => AskForFolder("Choose the Sin Spire folder, the one with SinSpire.exe in it.");
             folder.SelectedIndexChanged += (s, e) => ShowSource();
             patch.Click += (s, e) => Run(Patch.Apply);
+            var tips = new ToolTip { AutoPopDelay = 20000, InitialDelay = 400 };
+            tips.SetToolTip(browse, "Choose the game's folder yourself, the one with SinSpire.exe in it.");
+            tips.SetToolTip(patch, "Install the mod loader and UE4SS in this game, and the preset mods the first time. Safe to run again.");
+            tips.SetToolTip(remove, "Put the game's own exe back and stop loading mods. Your Mods folder is kept, and a UE4SS the patch replaced comes back.");
             remove.Click += (s, e) =>
             {
                 if (MessageBox.Show(this, "Remove the mod loader from this game? Your Mods folder is kept.", Text, MessageBoxButtons.OKCancel) == DialogResult.OK)

@@ -285,6 +285,10 @@ namespace SinSpireModLoader
             var later = new Button { Text = "Not Now", AutoSize = true, DialogResult = DialogResult.Cancel };
             var skip = new Button { Text = "Skip This Version", AutoSize = true, DialogResult = DialogResult.Ignore };
             update.Click += (s, e) => Choice = UpdateChoice.Update;
+            var tips = new ToolTip { AutoPopDelay = 20000, InitialDelay = 400 };
+            tips.SetToolTip(update, "Download and install this version now, then start the game.");
+            tips.SetToolTip(skip, "Don't ask about this version again. You're asked again when a newer one comes out.");
+            tips.SetToolTip(later, "Start the game now with the loader you have. You're asked again next time.");
             skip.Click += (s, e) => Choice = UpdateChoice.Skip;
             var buttons = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
             buttons.Controls.AddRange(new Control[] { later, skip, update });
