@@ -4,6 +4,8 @@ $scratch = Join-Path $env:TEMP "sinspire_modloader_test"; New-Item -ItemType Dir
 $patch = "$PSScriptRoot\..\dist\SinSpire-ModLoader-Patch.exe"
 $fake = "$scratch\fake game"
 $script:failures = 0
+# The launcher checks for mod loader updates after starting the game: point it at nothing instead of GitHub.
+$env:SINSPIRE_MODLOADER_TEST_API = ([Uri]"$scratch\no-releases.json").AbsoluteUri
 function Check($name, $ok) { if ($ok) { "ok    $name" } else { "FAIL  $name"; $script:failures++ } }
 function Run-Patch($mode) { (Start-Process $patch -ArgumentList $mode, "`"$fake`"" -Wait -PassThru).ExitCode }
 function Launch {
@@ -173,6 +175,58 @@ Check "flat settings put back" ((Get-Content "$win64\UE4SS-settings.ini") -eq "f
 Check "flat built-in mods put back" ((Get-Content "$win64\Mods\Keybinds\Scripts\main.lua") -eq "-- flat keybinds")
 Check "patch's ue4ss folder removed" (-not (Test-Path "$win64\ue4ss"))
 Check "flat backup gone" (-not (Test-Path "$fake\Mods\.modloader\ue4ss_before_patch"))
+
+# --- Any other UE4SS build, even a newer one, is replaced by the patch's own, and removing the patch puts it back.
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$zip = [IO.Compression.ZipFile]::OpenRead("$PSScriptRoot\..\build\ue4ss.zip")
+$entry = $zip.Entries | Where-Object { $_.FullName.Replace('/', '\') -eq 'ue4ss\UE4SS.dll' }
+$stream = $entry.Open(); $sha = [Security.Cryptography.SHA256]::Create()
+$bundledHash = [BitConverter]::ToString($sha.ComputeHash($stream)).Replace("-", ""); $stream.Dispose(); $zip.Dispose()
+function Is-Bundled { (Get-FileHash "$win64\ue4ss\UE4SS.dll").Hash -eq $bundledHash }
+foreach ($name in "UE4SS.dll", "UE4SS-settings.ini", "dwmapi.dll") { Remove-Item "$win64\$name" -ErrorAction SilentlyContinue }
+cmd /c rmdir /s /q "`"$win64\Mods`""
+New-Item -ItemType Directory -Force "$win64\ue4ss\Mods\NewerMod\Scripts", "$win64\ue4ss\UE4SS_Signatures" | Out-Null
+Set-Content "$win64\dwmapi.dll" "newer proxy"
+Set-Content "$win64\ue4ss\UE4SS.dll" "newer dll with LoopInGameThreadWithDelay"
+$newerHash = (Get-FileHash "$win64\ue4ss\UE4SS.dll").Hash
+Set-Content "$win64\ue4ss\UE4SS-settings.ini" "newer settings"
+Set-Content "$win64\ue4ss\UE4SS_Signatures\only_theirs.lua" "-- theirs only"
+Set-Content "$win64\ue4ss\Mods\NewerMod\Scripts\main.lua" "-- newer"
+Set-Content "$win64\ue4ss\Mods\NewerMod\enabled.txt" ""
+"Exit: " + (Run-Patch "--patch")
+Check "other UE4SS build replaced by the patch's" (Is-Bundled)
+Check "other proxy replaced" ((Get-Content "$win64\dwmapi.dll" -Raw) -notmatch "newer proxy")
+Check "other UE4SS backed up" ((Get-FileHash "$fake\Mods\.modloader\ue4ss_before_patch\ue4ss\UE4SS.dll").Hash -eq $newerHash)
+Check "other UE4SS's settings kept" ((Get-Content "$win64\ue4ss\UE4SS-settings.ini") -eq "newer settings")
+Check "other UE4SS's mod adopted and on" ((Test-Path "$fake\Mods\NewerMod\Scripts\main.lua") -and ((Get-Content "$win64\ue4ss\Mods\mods.txt") -contains "NewerMod : 1"))
+"Exit: " + (Run-Patch "--patch")
+Check "repatch keeps the patch's build and the backup" ((Is-Bundled) -and (Get-FileHash "$fake\Mods\.modloader\ue4ss_before_patch\ue4ss\UE4SS.dll").Hash -eq $newerHash)
+# An older patch's build in place over the kept one: updated, and the player's backup stays as it was.
+Set-Content "$win64\ue4ss\UE4SS.dll" "previous patch's dll"
+$addedList = "$fake\Mods\.modloader\ue4ss_before_patch\added_by_patch.txt"
+Set-Content $addedList (Get-Content $addedList | Where-Object { $_ -ne 'ue4ss\LICENSE' })
+Remove-Item "$win64\ue4ss\LICENSE"
+"Exit: " + (Run-Patch "--patch")
+Check "previous patch's build updated" (Is-Bundled)
+Check "player's backup untouched by the update" ((Get-FileHash "$fake\Mods\.modloader\ue4ss_before_patch\ue4ss\UE4SS.dll").Hash -eq $newerHash)
+Check "file new to this build recorded as added" ((Get-Content $addedList) -contains 'ue4ss\LICENSE')
+"Exit: " + (Run-Patch "--unpatch")
+Check "other UE4SS put back exactly" ((Get-FileHash "$win64\ue4ss\UE4SS.dll").Hash -eq $newerHash)
+Check "other proxy put back" ((Get-Content "$win64\dwmapi.dll") -eq "newer proxy")
+Check "other UE4SS's own file left" ((Get-Content "$win64\ue4ss\UE4SS_Signatures\only_theirs.lua") -eq "-- theirs only")
+Check "added files removed" (-not (Test-Path "$win64\ue4ss\LICENSE") -and -not (Test-Path "$win64\ue4ss\Mods\Keybinds\Scripts\main.lua"))
+Check "other UE4SS backup gone" (-not (Test-Path "$fake\Mods\.modloader\ue4ss_before_patch"))
+
+# --- A UE4SS an older patch installed is updated in place, with nothing kept, and removing the patch takes it away.
+cmd /c rmdir /s /q "`"$win64\ue4ss`""
+Remove-Item "$win64\dwmapi.dll"
+"Exit: " + (Run-Patch "--patch")
+Set-Content "$win64\ue4ss\UE4SS.dll" "older patch's dll"
+"Exit: " + (Run-Patch "--patch")
+Check "older patch's UE4SS updated" (Is-Bundled)
+Check "nothing kept of the patch's own UE4SS" (-not (Test-Path "$fake\Mods\.modloader\ue4ss_before_patch"))
+"Exit: " + (Run-Patch "--unpatch")
+Check "patch's UE4SS removed" (-not (Test-Path "$win64\ue4ss") -and -not (Test-Path "$win64\dwmapi.dll"))
 
 "--- log"; Get-Content "$fake\Mods\.modloader\modloader.log" | Select-Object -Last 8
 "Failures: $script:failures"

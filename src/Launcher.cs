@@ -88,6 +88,10 @@ namespace SinSpireModLoader
                 Application.Run(manager);
                 if (!manager.Play) { return; }
             }
+            else if (OfferUpdate(game))
+            {
+                return; // The patch updates the game and starts it again.
+            }
 
             // Whatever goes wrong with the mods, the game itself should still start.
             try
@@ -107,6 +111,26 @@ namespace SinSpireModLoader
                     "Sin Spire mods", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             StartGame(game);
+            // The game is on its way, so this costs it nothing. The answer is used at the next start.
+            Updater.RefreshIfDue(game);
+        }
+
+        // A newer mod loader found at an earlier start: update now, later, or never for that version.
+        static bool OfferUpdate(GameFolder game)
+        {
+            try
+            {
+                PatchRelease release = Updater.Pending(game);
+                if (release == null) { return false; }
+                UpdateChoice choice = UpdatePrompt.Ask(release, Updater.InstalledTag(game));
+                if (choice == UpdateChoice.Skip) { Updater.Skip(game, release.Tag); }
+                return choice == UpdateChoice.Update && Updater.DownloadAndStart(game, release, PassedArguments(), null);
+            }
+            catch (Exception error)
+            {
+                game.Log("Could not offer the mod loader update: " + error);
+                return false;
+            }
         }
     }
 
@@ -123,6 +147,9 @@ namespace SinSpireModLoader
         readonly Button recheck = new Button { Text = "Check Again", AutoSize = true };
         readonly Button play = new Button { Text = "Save and Play", AutoSize = true };
         readonly Button close = new Button { Text = "Save and Close", AutoSize = true };
+        readonly Label loaderStatus = new Label { AutoSize = true, Anchor = AnchorStyles.Left, Padding = new Padding(0, 6, 0, 6) };
+        readonly Button updateLoader = new Button { Text = "Update Mod Loader", AutoSize = true, Visible = false };
+        PatchRelease loaderRelease;
         List<RepoMod> repoMods = new List<RepoMod>();
         bool repoChecked, busy;
         bool filling;
@@ -201,6 +228,9 @@ namespace SinSpireModLoader
             repoList.SelectedIndexChanged += (s, e) => UpdateInstallButton();
             install.Click += (s, e) => InstallSelected();
             recheck.Click += (s, e) => CheckRepo();
+            updateLoader.Click += (s, e) => UpdateLoader();
+            loaderRelease = Updater.Pending(game); // what the last check found, until this tab checks again
+            ShowLoader();
 
             var note = new Label
             {
@@ -212,22 +242,27 @@ namespace SinSpireModLoader
             var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
             buttons.Controls.AddRange(new Control[] { install, recheck });
 
-            var page = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(8) };
+            var loader = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(0, 0, 0, 4) };
+            loader.Controls.AddRange(new Control[] { loaderStatus, updateLoader });
+
+            var page = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(8) };
+            page.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             page.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             page.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
             page.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             page.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            page.Controls.Add(note, 0, 0);
-            page.Controls.Add(repoList, 0, 1);
-            page.Controls.Add(repoStatus, 0, 2);
-            page.Controls.Add(buttons, 0, 3);
+            page.Controls.Add(loader, 0, 0);
+            page.Controls.Add(note, 0, 1);
+            page.Controls.Add(repoList, 0, 2);
+            page.Controls.Add(repoStatus, 0, 3);
+            page.Controls.Add(buttons, 0, 4);
             return page;
         }
 
         void SetBusy(bool value, string message)
         {
             busy = value;
-            recheck.Enabled = play.Enabled = close.Enabled = !value;
+            recheck.Enabled = play.Enabled = close.Enabled = updateLoader.Enabled = !value;
             repoStatus.Text = message;
             UpdateInstallButton();
         }
@@ -247,8 +282,35 @@ namespace SinSpireModLoader
                 game.Log("Could not list the mods to download: " + error);
                 message = "Could not check for mods: " + error.Message;
             }
+            try
+            {
+                loaderRelease = await Task.Run(() => Updater.CheckNow(game));
+            }
+            catch (Exception error)
+            {
+                game.Log("Could not check for a mod loader update: " + error.Message);
+            }
+            ShowLoader();
             FillRepo();
             SetBusy(false, message);
+        }
+
+        void ShowLoader()
+        {
+            string installed = Updater.InstalledTag(game);
+            bool newer = loaderRelease != null && Updater.IsNewer(loaderRelease.Tag, installed);
+            loaderStatus.Text = newer
+                ? "Mod Loader " + loaderRelease.Tag + " is out. You have " + (installed ?? "an older one") + "."
+                : "Mod Loader: " + (installed ?? "a patch from before 2026-11-14") + (loaderRelease != null ? ", up to date." : ".");
+            updateLoader.Visible = newer;
+        }
+
+        // Saves the list, then the patch updates the game and opens this window again.
+        void UpdateLoader()
+        {
+            if (loaderRelease == null) { return; }
+            Registry.Save(game, mods);
+            if (Updater.DownloadAndStart(game, loaderRelease, "-modmanager", this)) { Close(); }
         }
 
         async void InstallSelected()

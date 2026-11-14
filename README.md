@@ -6,6 +6,10 @@ A one-click patch and a small framework for modding Sin Spire, with a set of pre
 
 **You need your own copy of Sin Spire.** This repository does not include the game. Gooner DLC's pak (from the Get Mods tab) does include one mesh cut from the game's player model, as `CREDITS.txt` notes.
 
+## Download
+
+**[Download the patch](https://github.com/Scott-s-Modding-Cult/sin-spire-modloader/releases/latest/download/SinSpire-ModLoader-Patch.exe)** (`SinSpire-ModLoader-Patch.exe`). This link always gives the newest version, so it is the only one you need, and you only download it once: the loader then checks for new versions by itself (at most once a day, after the game has started) and asks at the next start whether to update. The Mod Manager's Get Mods tab shows it too. Older patch releases stay on the Releases page only for reference.
+
 ## Preset mods
 
 The mods in `mods\` come with the patch and appear in the Mod Manager, where each can be turned on or off.
@@ -53,11 +57,13 @@ The patch asks Steam for its libraries and installed games, then checks a runnin
 
 The patch keeps the game's own exe as `SinSpire-Original.exe` and installs the loader as `SinSpire.exe`. Mods already installed in `ue4ss\Mods` or `Content\Paks\~mods` are moved into `Mods`, and each stays on or off as it was. It is safe to run again.
 
-A UE4SS that is already installed is kept, unless it is too old for the mods, as UE4SS 3.0.1 is. The patch then puts its own UE4SS in its place and saves the old files in `Mods\.modloader\ue4ss_before_patch`. UE4SS 3.0.1 keeps its files straight in `Win64` rather than in a `ue4ss` folder; its Lua mods move into `Mods`, each staying on or off as it was.
+The patch always leaves the game with the UE4SS it carries (v3.0.1 Beta, 1ceefac8), the build the mods here are made and tested for; a mod with a C++ part only loads in that exact build. Any other UE4SS already installed, older or newer, is replaced, and the files it overwrites are saved in `Mods\.modloader\ue4ss_before_patch`. That UE4SS's settings stay, and the mods in its `ue4ss\Mods` folder move into `Mods` like any others. UE4SS 3.0.1 keeps its files straight in `Win64` rather than in a `ue4ss` folder; its Lua mods move into `Mods`, each staying on or off as it was.
 
-**Remove Patch** puts the original exe back and takes away the links. If the patch installed UE4SS, it removes that too, and if it updated an older UE4SS, it puts the old one back. The `Mods` folder is kept.
+**Remove Patch** puts the original exe back and takes away the links. If the patch installed UE4SS, it removes that too, and if it replaced another UE4SS, it puts that one back. The `Mods` folder is kept.
 
 A Steam update or file verification restores the game's exe, which turns the loader off. Run the patch again afterwards.
+
+**Updates.** Each patch records its release (`patch-YYYY.MM.DD`) in `Mods\.modloader\install.txt`. After the game starts, the loader asks GitHub for the newest full release whose tag starts with `patch-` (other releases, such as single mods, are passed over) and remembers it in `Mods\.modloader\update.txt`. At the next start it offers **Update**, **Skip This Version** or **Not Now**. Update downloads the patch, checks it against GitHub's size and SHA-256, and hands over to it: the patch waits for the loader to close, patches the game as usual and starts it again. Its log is `Mods\.modloader\update.log`. A release only reaches players when it is a full release (not a pre-release) tagged `patch-YYYY.MM.DD` with `SinSpire-ModLoader-Patch.exe` attached, and built with `build.ps1 -Tag` set to that same tag. Patches from before 2026-11-14 have no updater: run the new patch once.
 
 To bring mods to another copy of the game, run the patch from a folder that has a `Mods` folder beside it and choose the other copy.
 

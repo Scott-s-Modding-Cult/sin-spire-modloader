@@ -13,6 +13,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -39,6 +40,20 @@ namespace SinSpireModLoader
         static Stream Resource(string name)
         {
             return Assembly.GetExecutingAssembly().GetManifestResourceStream(name);
+        }
+
+        // The release this patch is, such as patch-2026.11.14, written in by build.ps1. The launcher compares it with
+        // GitHub's newest to offer updates.
+        public static string Tag
+        {
+            get
+            {
+                using (Stream stream = Resource("version.txt"))
+                {
+                    if (stream == null) { return null; }
+                    using (var reader = new StreamReader(stream)) { return reader.ReadToEnd().Trim(); }
+                }
+            }
         }
 
         enum Replace { Never, Always, WhenNewer }
@@ -89,8 +104,9 @@ namespace SinSpireModLoader
             say("Installed the mod loader as SinSpire.exe.");
         }
 
-        // The mods loop with this, which UE4SS 3.0.1, the last stable release, does not have. Without it they never start.
-        const string Ue4ssNeededFunction = "LoopInGameThreadWithDelay";
+        // The mods are made and tested for the UE4SS the patch carries, and a mod with a C++ part (a dll) only loads in
+        // that exact build, so the game always ends up with it. Any other UE4SS is set aside, and Remove Patch puts it back.
+        const string Ue4ssDllEntry = @"ue4ss\UE4SS.dll";
         const string Ue4ssBackupName = "ue4ss_before_patch";
         const string Ue4ssAddedList = "added_by_patch.txt";
         // A player's own UE4SS settings and load order stay when their UE4SS is replaced.
@@ -101,19 +117,32 @@ namespace SinSpireModLoader
 
         static string Ue4ssBackup(GameFolder game) { return Path.Combine(game.State, Ue4ssBackupName); }
 
-        // Lua function names are stored as plain text in the dll.
-        static bool HasNeededFunction(string dll)
+        static string Sha256(Stream stream)
         {
-            byte[] bytes = File.ReadAllBytes(dll);
-            byte[] name = Encoding.ASCII.GetBytes(Ue4ssNeededFunction);
-            for (int start = 0; start <= bytes.Length - name.Length; start++)
+            using (var sha = SHA256.Create()) { return BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", ""); }
+        }
+
+        static string Sha256(string file)
+        {
+            using (Stream stream = File.OpenRead(file)) { return Sha256(stream); }
+        }
+
+        // The SHA-256 of the UE4SS.dll this patch carries.
+        static string BundledUe4ssSha256()
+        {
+            using (var zip = new ZipArchive(Resource("ue4ss.zip"), ZipArchiveMode.Read))
             {
-                if (bytes[start] != name[0]) { continue; }
-                int matched = 1;
-                while (matched < name.Length && bytes[start + matched] == name[matched]) { matched++; }
-                if (matched == name.Length) { return true; }
+                ZipArchiveEntry entry = zip.Entries.First(e => string.Equals(e.FullName.Replace('/', '\\'), Ue4ssDllEntry, StringComparison.OrdinalIgnoreCase));
+                using (Stream stream = entry.Open()) { return Sha256(stream); }
             }
-            return false;
+        }
+
+        // Where the UE4SS being replaced came from, which decides what is kept of it.
+        enum Ue4ssOrigin
+        {
+            Player,       // Installed some other way: kept in the backup, and Remove Patch puts it back.
+            PlayerKept,   // An earlier patch already kept the player's own one: that backup stays as it is.
+            Patch,        // An earlier patch installed it, so Remove Patch takes it away: nothing to keep.
         }
 
         // UE4SS 3.0.1 and older keep everything straight in Win64, and its proxy dll loads that copy, not the one in the
@@ -153,14 +182,22 @@ namespace SinSpireModLoader
             }
         }
 
-        // Puts the patch's UE4SS over an older one. What it replaces is kept, and Remove Patch puts it back.
-        static void ReplaceUe4ss(GameFolder game, bool flat, Action<string> say)
+        // Puts the patch's UE4SS over another one. A player's own UE4SS is kept, and Remove Patch puts it back.
+        static void ReplaceUe4ss(GameFolder game, bool flat, Ue4ssOrigin origin, Action<string> say)
         {
             string backup = Ue4ssBackup(game);
-            if (Directory.Exists(backup)) { Directory.Delete(backup, true); }
-            Directory.CreateDirectory(backup);
-            if (flat) { MoveFlatUe4ss(game, backup); }
+            string list = Path.Combine(backup, Ue4ssAddedList);
             var added = new List<string>();
+            if (origin == Ue4ssOrigin.Player)
+            {
+                if (Directory.Exists(backup)) { Directory.Delete(backup, true); }
+                Directory.CreateDirectory(backup);
+                if (flat) { MoveFlatUe4ss(game, backup); }
+            }
+            else if (origin == Ue4ssOrigin.PlayerKept && File.Exists(list))
+            {
+                added.AddRange(File.ReadAllLines(list).Where(l => l.Trim() != ""));
+            }
             using (var zip = new ZipArchive(Resource("ue4ss.zip"), ZipArchiveMode.Read))
             {
                 foreach (ZipArchiveEntry entry in zip.Entries)
@@ -169,7 +206,7 @@ namespace SinSpireModLoader
                     string relative = entry.FullName.Replace('/', '\\');
                     string path = Path.Combine(game.Win64, relative);
                     // Beside a flat UE4SS, the ue4ss folder is not part of the old install, as an earlier patch put it there.
-                    bool oldFile = !flat || !relative.StartsWith(@"ue4ss\", StringComparison.OrdinalIgnoreCase);
+                    bool oldFile = origin == Ue4ssOrigin.Player && (!flat || !relative.StartsWith(@"ue4ss\", StringComparison.OrdinalIgnoreCase));
                     if (File.Exists(path))
                     {
                         if (Ue4ssPlayerFiles.Contains(relative)) { continue; }
@@ -180,7 +217,7 @@ namespace SinSpireModLoader
                             File.Copy(path, kept, true);
                         }
                     }
-                    else if (oldFile)
+                    else if (oldFile || (origin == Ue4ssOrigin.PlayerKept && !added.Contains(relative, StringComparer.OrdinalIgnoreCase)))
                     {
                         added.Add(relative);
                     }
@@ -188,9 +225,16 @@ namespace SinSpireModLoader
                     entry.ExtractToFile(path, true);
                 }
             }
-            File.WriteAllLines(Path.Combine(backup, Ue4ssAddedList), added);
-            say("Updated UE4SS, as the installed one is too old for the mods. The old one is kept in Mods\\.modloader\\"
-                + Ue4ssBackupName + " and comes back if the patch is removed.");
+            if (origin != Ue4ssOrigin.Patch) { File.WriteAllLines(list, added); }
+            if (origin == Ue4ssOrigin.Player)
+            {
+                say("Replaced UE4SS with the build the mods are made for. The one that was installed is kept in Mods\\.modloader\\"
+                    + Ue4ssBackupName + " and comes back if the patch is removed.");
+            }
+            else
+            {
+                say("Updated UE4SS to the build the mods are made for.");
+            }
         }
 
         static void RestoreUe4ss(GameFolder game, Action<string> say)
@@ -221,16 +265,24 @@ namespace SinSpireModLoader
         {
             string dll = Path.Combine(game.Ue4ss, "UE4SS.dll");
             bool flat = File.Exists(Path.Combine(game.Win64, "UE4SS.dll"));
-            if (flat || (File.Exists(dll) && !HasNeededFunction(dll)))
+            if (flat)
             {
-                ReplaceUe4ss(game, flat, say);
+                ReplaceUe4ss(game, true, Ue4ssOrigin.Player, say);
                 // The ue4ss folder is the patch's own next to a flat UE4SS, so Remove Patch takes it away.
-                return flat;
+                return true;
+            }
+            if (File.Exists(dll) && Sha256(dll) != BundledUe4ssSha256())
+            {
+                bool patchInstalled = File.Exists(game.InstallInfo) && File.ReadAllText(game.InstallInfo).Contains("ue4ss_added=1");
+                Ue4ssOrigin origin = patchInstalled ? Ue4ssOrigin.Patch
+                    : Directory.Exists(Ue4ssBackup(game)) ? Ue4ssOrigin.PlayerKept : Ue4ssOrigin.Player;
+                ReplaceUe4ss(game, false, origin, say);
+                return false;
             }
             bool present = File.Exists(Path.Combine(game.Win64, "dwmapi.dll")) && File.Exists(dll);
             if (present)
             {
-                say("UE4SS is already installed, so it was left as it is.");
+                say("UE4SS is already the build the mods are made for.");
                 return false;
             }
             ExtractZip("ue4ss.zip", game.Win64, Replace.Never);
@@ -319,7 +371,8 @@ namespace SinSpireModLoader
             Deployer.Undeploy(game);
             bool addedUe4ss = InstallUe4ss(game, say);
             if (!addedUe4ss && File.Exists(game.InstallInfo)) { addedUe4ss = File.ReadAllText(game.InstallInfo).Contains("ue4ss_added=1"); }
-            File.WriteAllText(game.InstallInfo, "ue4ss_added=" + (addedUe4ss ? "1" : "0") + Environment.NewLine);
+            File.WriteAllText(game.InstallInfo, "ue4ss_added=" + (addedUe4ss ? "1" : "0") + Environment.NewLine +
+                (Tag != null ? "patch=" + Tag + Environment.NewLine : ""));
 
             ExtractZip("modkit.zip", game.Mods, Replace.Always);
             BringModsFromBesideThePatch(game, say);
@@ -367,6 +420,54 @@ namespace SinSpireModLoader
 
     static class PatchProgram
     {
+        static string Arg(string[] args, string name)
+        {
+            int at = Array.IndexOf(args, name);
+            return at >= 0 && at + 1 < args.Length ? args[at + 1] : null;
+        }
+
+        // Waits for the launcher to close (it is the SinSpire.exe being replaced), patches with a small window showing,
+        // then starts SinSpire.exe again: the game, or the Mod Manager when the update came from there.
+        static int Update(GameFolder game, string waitFor, string thenArguments)
+        {
+            int id;
+            if (int.TryParse(waitFor, out id))
+            {
+                try { using (Process launcher = Process.GetProcessById(id)) { launcher.WaitForExit(30000); } }
+                catch (ArgumentException) { } // already gone
+            }
+            Application.EnableVisualStyles();
+            var report = new List<string> { "Updating the mod loader to " + (Patch.Tag ?? "a new version") + "." };
+            Exception failure = null;
+            using (var form = new ProgressForm("Updating the Sin Spire Mod Loader", "Updating the mod loader to " + (Patch.Tag ?? "a new version") + "..."))
+            {
+                form.Shown += async (s, e) =>
+                {
+                    try { await Task.Run(() => Patch.Apply(game, line => { report.Add(line); form.Say(line); })); }
+                    catch (Exception error) { failure = error; }
+                    form.Close();
+                };
+                Application.Run(form);
+            }
+            if (failure != null) { report.Add("Failed: " + failure); }
+            // Its own log, as every start of the game begins modloader.log afresh.
+            string updateLog = Path.Combine(game.State, "update.log");
+            try
+            {
+                Directory.CreateDirectory(game.State);
+                File.AppendAllLines(updateLog, report.Select(line => DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + line));
+            }
+            catch (Exception) { }
+            if (failure != null)
+            {
+                MessageBox.Show("The mod loader could not be updated: " + failure.Message + "\n\nThe log is " + updateLog +
+                    ". You can also download the patch again and run it.", "Sin Spire mods", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            // Started either way: after a failure the old launcher is still in place, or the game's own exe.
+            Process.Start(new ProcessStartInfo(game.Exe, thenArguments.Replace("'", "\"")) { WorkingDirectory = game.Root, UseShellExecute = false });
+            return failure == null ? 0 : 1;
+        }
+
         [STAThread]
         static int Main(string[] args)
         {
@@ -387,6 +488,11 @@ namespace SinSpireModLoader
                     foreach (string line in report) { game.Log(line); }
                     return 1;
                 }
+            }
+            // From the launcher's updater: --update "<folder>" --wait <launcher's process id> [--then "<arguments>"]
+            if (args.Length >= 2 && args[0] == "--update")
+            {
+                return Update(new GameFolder(args[1]), Arg(args, "--wait"), Arg(args, "--then") ?? "");
             }
             if (args.Length >= 2 && args[0] == "--find")
             {
@@ -414,7 +520,7 @@ namespace SinSpireModLoader
 
         public PatchForm(bool skipSearch)
         {
-            Text = "Sin Spire Mod Loader Patch";
+            Text = "Sin Spire Mod Loader Patch" + (Patch.Tag != null ? " (" + Patch.Tag + ")" : "");
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
             ClientSize = new Size(640, 380);

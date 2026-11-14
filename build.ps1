@@ -2,11 +2,15 @@
 #   -GameDir   The Sin Spire folder, used only for the exe's icon. Found by itself if left out.
 #   -Ue4ssDir  A folder holding dwmapi.dll and ue4ss\. Found in a game folder or in ue4ss_files\ here if left out.
 #   -Pick      Asks with a folder window when UE4SS cannot be found. Build Patch.bat uses this.
+#   -Tag       The release this build becomes, patch-YYYY.MM.DD (today's by default). The patch records it in the game,
+#              and the launcher offers an update when GitHub has a newer full release with such a tag.
 param(
     [string]$GameDir,
     [string]$Ue4ssDir,
-    [switch]$Pick
+    [switch]$Pick,
+    [string]$Tag = ("patch-" + (Get-Date -Format "yyyy.MM.dd"))
 )
+if ($Tag -notmatch '^patch-\d{4}\.\d{2}\.\d{2}') { throw "The tag must look like patch-2026.11.14." }
 $ErrorActionPreference = "Stop"
 $here = $PSScriptRoot
 
@@ -68,7 +72,7 @@ if ($iconSource) {
     $iconArgument = @("/win32icon:$build\icon.ico")
 }
 
-& $csc /nologo /target:winexe /platform:x64 /optimize+ "/out:$build\launcher.exe" @iconArgument @references "$here\src\Core.cs" "$here\src\Importer.cs" "$here\src\Launcher.cs"
+& $csc /nologo /target:winexe /platform:x64 /optimize+ "/out:$build\launcher.exe" @iconArgument @references "$here\src\Core.cs" "$here\src\Importer.cs" "$here\src\Updater.cs" "$here\src\Launcher.cs"
 if ($LASTEXITCODE -ne 0) { throw "Launcher did not compile" }
 
 [IO.Compression.ZipFile]::CreateFromDirectory("$here\core", "$build\modkit.zip")
@@ -103,7 +107,9 @@ BPModLoaderMod : 1
 Keybinds : 1
 "@ | Set-Content "$ue4ss\ue4ss\Mods\mods.txt" -Encoding ascii
 [IO.Compression.ZipFile]::CreateFromDirectory($ue4ss, "$build\ue4ss.zip")
+Set-Content "$build\version.txt" $Tag -Encoding ascii -NoNewline
+"Release tag: $Tag"
 
-& $csc /nologo /target:winexe /platform:x64 /optimize+ "/out:$dist\SinSpire-ModLoader-Patch.exe" @iconArgument @references "/resource:$build\launcher.exe,launcher.exe" "/resource:$build\ue4ss.zip,ue4ss.zip" "/resource:$build\modkit.zip,modkit.zip" "/resource:$build\presets.zip,presets.zip" "$here\src\Core.cs" "$here\src\GameSearch.cs" "$here\src\Patcher.cs"
+& $csc /nologo /target:winexe /platform:x64 /optimize+ "/out:$dist\SinSpire-ModLoader-Patch.exe" @iconArgument @references "/resource:$build\launcher.exe,launcher.exe" "/resource:$build\ue4ss.zip,ue4ss.zip" "/resource:$build\modkit.zip,modkit.zip" "/resource:$build\presets.zip,presets.zip" "/resource:$build\version.txt,version.txt" "$here\src\Core.cs" "$here\src\GameSearch.cs" "$here\src\Updater.cs" "$here\src\Patcher.cs"
 if ($LASTEXITCODE -ne 0) { throw "Patch did not compile" }
 Get-Item "$dist\SinSpire-ModLoader-Patch.exe" | Select-Object Name, Length
