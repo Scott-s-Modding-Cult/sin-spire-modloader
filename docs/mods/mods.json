@@ -210,6 +210,27 @@
       "preset": false,
       "defaultOff": true,
       "alwaysOn": false
+    },
+    {
+      "id": "Multiplayer",
+      "title": "Multiplayer Hub",
+      "icon": "👥",
+      "category": "Gameplay",
+      "summary": "Play with Steam friends: meet in the Starting Hall, talk with proximity voice chat, and go into dungeons together.",
+      "details": "Main menu > Extras > Multiplayer Hub hosts a hub or joins a Steam friend's (friends and invites only). Up to 8 players meet in the Starting Hall and see each other move, with name tags. Voice chat is proximity based: full volume up close, quieter with distance, silent past 25 m, from the side the speaker stands on, and muffled through walls; a name tag turns green while that player talks. Hold V to talk, or set Talk to Press V on / off. When anyone holds E on a portal (or the Backrooms door), everyone in the hub goes, and everyone gets the same dungeon: the same rooms, doors, locked doors, keys and chests, and a chest one player opens is open and empty for the others. When the leader goes back to the hall, everyone follows. In a hub you play a separate multiplayer character with its own save, first copied from your own, so your campaign saves are never written. Esc > Multiplayer Hub in a hub has invites, the players with their pings, the voice settings, a voice test and Leave hub. An early build: other players are placeholder bodies with no walk animation, each player fights their own copy of the enemies, there is no text chat, talking is keyboard only, and voice uses Windows' default microphone and speakers with no echo cancelling. Everyone needs the Steam version of the game and this mod; the same Backrooms for everyone needs Backrooms 2.1.0 on every PC. Tested with two copies of the game on one PC, off screen; play between two PCs has only been tried once, with an earlier version. Not included with the patch; get it from the Get Mods tab.",
+      "checked": "0.4.1 a1472b5db699",
+      "stamp": "0.4.1 a1472b5db699",
+      "version": "0.4.1",
+      "zip": "Multiplayer.zip",
+      "bytes": 465294,
+      "sha": "a1472b5db699",
+      "sha256": "a1472b5db699c75e6f830e88e1f00067e8918bcd9baeb7cfdb59ad62cb47fbcf",
+      "keys": [],
+      "requires": [],
+      "loadAfter": [],
+      "preset": false,
+      "defaultOff": false,
+      "alwaysOn": false
     }
   ]
 }

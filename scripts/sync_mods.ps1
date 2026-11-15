@@ -5,7 +5,7 @@ param([string]$GameDir = (Split-Path (Split-Path (Split-Path $PSScriptRoot))))
 $ErrorActionPreference = "Stop"
 $repo = Split-Path $PSScriptRoot  # the repository: this script sits in its scripts folder
 $target = "$repo\mods"
-$personal = "settings.txt", "monitor.txt", "monitors.txt", "helper.log", "enabled.txt", "mod-randomizer.json", "boss-timer.txt", "controller-debug.log"
+$personal = "settings.txt", "monitor.txt", "monitors.txt", "helper.log", "enabled.txt", "mod-randomizer.json", "boss-timer.txt", "controller-debug.log", "voice.txt"
 
 foreach ($mod in Get-ChildItem "$GameDir\Mods" -Directory | Where-Object { $_.Name -notlike ".*" -and $_.Name -ne "ModKit" -and $_.Name -ne "Backrooms" }) {
     $to = "$target\$($mod.Name)"

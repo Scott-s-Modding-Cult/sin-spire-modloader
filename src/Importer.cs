@@ -33,7 +33,7 @@ namespace SinSpireModLoader
         const string ZipVariable = "SINSPIRE_MODLOADER_TEST_ZIPS";
 
         // Each player's own files, which an update keeps. Everything else in the old folder is replaced.
-        static readonly string[] PersonalFiles = { "settings.txt", "monitor.txt", "monitors.txt", "helper.log", "mod-randomizer.json", "boss-timer.txt" };
+        static readonly string[] PersonalFiles = { "settings.txt", "monitor.txt", "monitors.txt", "helper.log", "mod-randomizer.json", "boss-timer.txt", "voice.txt" };
         static readonly Regex ZipName = new Regex(@"^[A-Za-z0-9_-]+\.zip$");
 
         static string ImportDir(GameFolder game) { return Path.Combine(game.State, "import"); }
