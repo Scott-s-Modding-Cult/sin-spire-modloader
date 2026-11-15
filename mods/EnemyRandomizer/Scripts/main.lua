@@ -5,10 +5,17 @@
 -- no manager, such as boss arenas and the tutorial, are left alone, as are stalkers, which come from BP_StalkerTimer.
 --
 -- mod-randomizer.json is read once at launch and is not watched. Changes in the admin panel are written back to it.
+--
+-- Paired enemies: other mods can register pairs through the RandomizerPairs library shipped with this mod (see
+-- Shared\RandomizerPairs). Their weights join the table as one marker class, a plain engine TargetPoint, which the
+-- spawners hand out like an enemy (with no controller, like an empty spawn). Once the floor has spawned, each marker that
+-- actually appeared becomes a spot for one of the pairs, picked by weight; the marker is removed and the pair's own mod
+-- spawns it there. Without such mods nothing changes.
 
 local ModKit = require("ModKit")
 local AdminTabs = require("AdminTabs")
 local UEHelpers = require("UEHelpers")
+local RandomizerPairs = require("RandomizerPairs")
 
 local mod = ModKit.new("EnemyRandomizer")
 
@@ -45,14 +52,33 @@ local ENEMIES = {
     { key = "Wraith", label = "Wraith", controller = "Wraith/BPAI_Wraith", weight = 10 },
 }
 
+-- Pairs are meant to be rarer than enemies, so their rows offer smaller steps.
+local PAIR_WEIGHTS = { 0, 0.25, 0.5, 1, 2, 5, 10 }
+local PAIR_WEIGHT_LABELS = { "Off", "0.25", "0.5", "1", "2", "5", "10" }
+local PAIR_MARKER = "/Script/Engine.TargetPoint"
+local SPAWN_LIFT_CM = 88.0 -- BP_AISpawner spawns its class this far above itself.
+local MARKER_MATCH_CM = 20.0
+local PAIR_SCAN_DELAY = 0.5 -- seconds after the manager has handed out its table
+
 local enabled = true
 local empty_percent = 25
 local patched = {} -- The managers already changed, by address, until they are gone.
+local pair_weights = {} -- pair id -> weight, from the file or the panel; registered pairs not here use their default
+local pair_rows = {} -- pair ids that have a row on the admin tab
+local pending_pairs = {} -- manager address -> { pairs, marker address, since } until its spots are handed out
+local clock = 0.0
 
 local function save_config()
     local lines = {}
     for index, enemy in ipairs(ENEMIES) do
         lines[index] = string.format('        "%s": %s', enemy.key, tostring(enemy.weight))
+    end
+    local pair_lines = {}
+    local ids = {}
+    for id in pairs(pair_weights) do table.insert(ids, id) end
+    table.sort(ids)
+    for _, id in ipairs(ids) do
+        table.insert(pair_lines, string.format('        "%s": %s', id, tostring(pair_weights[id])))
     end
     local file = io.open(CONFIG_FILE, "w")
     if not file then
@@ -61,7 +87,8 @@ local function save_config()
     end
     file:write('{\n    "enabled": ' .. tostring(enabled) .. ',\n    "' .. EMPTY_KEY .. '": ' .. tostring(empty_percent)
         .. ',\n    "enemies": {\n'
-        .. table.concat(lines, ",\n") .. "\n    }\n}\n")
+        .. table.concat(lines, ",\n") .. "\n    },\n    \"pairs\": {\n"
+        .. table.concat(pair_lines, ",\n") .. (#pair_lines > 0 and "\n" or "") .. "    }\n}\n")
     file:close()
 end
 
@@ -74,6 +101,14 @@ local function load_config()
     end
     local text = file:read("*a")
     file:close()
+    -- The pairs block first, so its ids are not read as enemies.
+    local pair_block = text:match('"pairs"%s*:%s*(%b{})')
+    if pair_block then
+        text = text:gsub('"pairs"%s*:%s*%b{}', "", 1)
+        for id, value in pair_block:gmatch('"([^"]+)"%s*:%s*(%-?%d+%.?%d*)') do
+            pair_weights[id] = math.max(tonumber(value), 0)
+        end
+    end
     local switch = text:match('"enabled"%s*:%s*(%a+)')
     if switch then
         enabled = switch == "true"
@@ -120,6 +155,34 @@ local function load_class(folder, path)
     return nil
 end
 
+local function pair_weight(pair)
+    local weight = pair_weights[pair.id]
+    if weight == nil then weight = pair.weight end
+    return weight
+end
+
+-- The registered pairs that are switched on, with their weights.
+local function live_pairs()
+    local out, total = {}, 0
+    for _, pair in ipairs(RandomizerPairs.List()) do
+        local weight = pair_weight(pair)
+        if weight > 0 then
+            table.insert(out, { id = pair.id, weight = weight })
+            total = total + weight
+        end
+    end
+    return out, total
+end
+
+local function pick_pair(list, total)
+    local roll = math.random() * total
+    for _, pair in ipairs(list) do
+        roll = roll - pair.weight
+        if roll <= 0 then return pair.id end
+    end
+    return list[#list].id
+end
+
 local function patch_manager(manager)
     local chosen = {}
     for _, enemy in ipairs(ENEMIES) do
@@ -146,6 +209,20 @@ local function patch_manager(manager)
             manager.AITableControllers:Add(entry.class, entry.controller)
         end
     end
+    -- Registered pairs share one marker entry; which pair each spot gets is decided once it has spawned.
+    local pair_list, pair_total = live_pairs()
+    local pair_note = ""
+    if pair_total > 0 then
+        local marker = StaticFindObject(PAIR_MARKER)
+        if marker:IsValid() then
+            manager.AITable:Add(marker, pair_total)
+            total = total + pair_total
+            pending_pairs[manager:GetAddress()] = { pairs = pair_list, total = pair_total, marker = marker:GetAddress() }
+            pair_note = string.format(", %d paired kinds (weight %g)", #pair_list, pair_total)
+        else
+            mod.log("Could not find " .. PAIR_MARKER .. ", so no pairs on this floor")
+        end
+    end
     -- An empty spawn is a plain Actor, with nothing to see and no controller, as with the Gold Virgin. The manager only
     -- counts BP_BaseEnemyCharacter, so these do not get in the way of FullClear.
     if empty_percent > 0 then
@@ -156,7 +233,81 @@ local function patch_manager(manager)
             mod.log("Could not find the Actor class, so no spawns will be empty on this floor")
         end
     end
-    mod.log("Replaced this floor's group with " .. #chosen .. " enemies, " .. empty_percent .. "% of spawns empty")
+    mod.log("Replaced this floor's group with " .. #chosen .. " enemies, " .. empty_percent .. "% of spawns empty" .. pair_note)
+end
+
+-- Once a patched manager has handed out its table (ValueSum is set then, and the spawners spawn in the same frame),
+-- every spawner given the marker that really spawned one becomes a pair spot. The game's own spawn chance decides that,
+-- as for enemies. Markers are removed.
+local function hand_out_pairs(manager, pending)
+    local spots = {}
+    local markers = {}
+    for _, point in ipairs(FindAllOf("TargetPoint") or {}) do
+        if point:IsValid() then table.insert(markers, point) end
+    end
+    local given = 0
+    for _, spawner in ipairs(FindAllOf("BP_AISpawner_C") or {}) do
+        local class = spawner:IsValid() and spawner.AIClass
+        if class and class:IsValid() and class:GetAddress() == pending.marker then
+            given = given + 1
+            local at = spawner:K2_GetActorLocation()
+            for index, point in ipairs(markers) do
+                local p = point:K2_GetActorLocation()
+                local dx, dy, dz = p.X - at.X, p.Y - at.Y, p.Z - (at.Z + SPAWN_LIFT_CM)
+                if dx * dx + dy * dy + dz * dz <= MARKER_MATCH_CM * MARKER_MATCH_CM then
+                    table.insert(spots, { X = at.X, Y = at.Y, Z = at.Z, Yaw = spawner:K2_GetActorRotation().Yaw })
+                    point:K2_DestroyActor()
+                    table.remove(markers, index)
+                    break
+                end
+            end
+        end
+    end
+    local counts = {}
+    for _, spot in ipairs(spots) do
+        local id = pick_pair(pending.pairs, pending.total)
+        RandomizerPairs.Request(id, spot)
+        counts[id] = (counts[id] or 0) + 1
+    end
+    local parts = {}
+    for id, n in pairs(counts) do table.insert(parts, id .. " x" .. n) end
+    table.sort(parts)
+    mod.log(string.format("Pairs: %d spawners got a pair, %d spawned: %s", given, #spots,
+        #parts > 0 and table.concat(parts, ", ") or "none"))
+end
+
+local function update_pairs()
+    for address, pending in pairs(pending_pairs) do
+        local manager = nil
+        for _, m in ipairs(FindAllOf("BP_AIManager_C") or {}) do
+            if m:IsValid() and m:GetAddress() == address then manager = m break end
+        end
+        if not manager then
+            pending_pairs[address] = nil
+        elseif manager.ValueSum ~= 0 then
+            pending.since = pending.since or clock
+            if clock - pending.since >= PAIR_SCAN_DELAY then
+                pending_pairs[address] = nil
+                hand_out_pairs(manager, pending)
+            end
+        end
+    end
+end
+
+-- Pairs can register after this mod has loaded (load order), so their rows are added as they appear.
+local tab = nil
+local function update_pair_rows()
+    if not tab then return end
+    for _, pair in ipairs(RandomizerPairs.List()) do
+        if not pair_rows[pair.id] then
+            pair_rows[pair.id] = true
+            tab:AddChoice("Pair: " .. pair.label, PAIR_WEIGHT_LABELS, closest_index(PAIR_WEIGHTS, pair_weight(pair)), function(index)
+                pair_weights[pair.id] = PAIR_WEIGHTS[index + 1]
+                save_config()
+                mod.log(pair.label .. " is now " .. pair_weights[pair.id])
+            end)
+        end
+    end
 end
 
 local function update_managers()
@@ -181,7 +332,7 @@ local function update_managers()
 end
 
 local function add_tab()
-    local tab = AdminTabs.AddTab({ id = "EnemyRandomizer", title = "Enemy Randomizer" })
+    tab = AdminTabs.AddTab({ id = "EnemyRandomizer", title = "Enemy Randomizer" })
     tab:AddChoice("Randomizer (from the next floor)", OFF_ON, enabled and 1 or 0, function(index)
         enabled = index == 1
         save_config()
@@ -205,7 +356,10 @@ load_config()
 add_tab()
 
 mod.loop(TICK_MS, function()
+    clock = clock + TICK_MS / 1000.0
     update_managers()
+    update_pairs()
+    update_pair_rows()
     AdminTabs.Poll()
 end)
 

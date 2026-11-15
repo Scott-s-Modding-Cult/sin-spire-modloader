@@ -1,9 +1,9 @@
-{
-    "title": "Enemy Randomizer",
-    "description": "Any regular enemy can appear at any spawn point on any floor. Set it up in the admin panel or mod-randomizer.json.",
-    "requires": [
-        "ModKit"
-    ],
-    "version": "1.1.0",
-    "preset": true
+﻿{
+    "title":  "Enemy Randomizer",
+    "description":  "Any regular enemy can appear at any spawn point on any floor. Other mods can add paired enemies to the mix (Nurse Touch does). Set it up in the admin panel or mod-randomizer.json.",
+    "requires":  [
+                     "ModKit"
+                 ],
+    "version":  "1.2.0",
+    "preset":  true
 }
