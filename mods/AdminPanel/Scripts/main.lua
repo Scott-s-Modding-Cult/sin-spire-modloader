@@ -22,6 +22,8 @@ local PAUSE_MENU_SHORT_CLASS = "BPW_PauseMenu_C"
 local PAUSE_BUTTON_LABEL = "Admin Panel"
 local BUTTON_PRESSED_HOOK = BUTTON_CLASS
     .. ":BndEvt__BPW_GenericMenuButton_Button_14_K2Node_ComponentBoundEvent_0_OnButtonPressedEvent__DelegateSignature"
+local ARROW_BUTTONS = { "LeftButton", "RightButton" } -- a settings row's arrows (OwnDefaultSpinner)
+local CLICK_ON_MOUSE_DOWN = 1 -- EButtonClickMethod::MouseDown
 local LOOP_MS = 25 -- Often enough to catch a quick tap on the controller.
 local LOOPS_PER_TICK = 2 -- Everything else runs every 50 ms, as before.
 local FIRST_ROW_CHILD = 2 -- In the panel's list the title comes first, then the controller hint, then the rows.
@@ -404,6 +406,20 @@ local function add_row(box, controller, row)
         fill_list(widget, row.options)
     end
     fill_list(widget.Spinner, row.options)
+    -- The arrows click on mouse down and never take the focus. The panel hands the focus back to the game's viewport
+    -- every loop (so the controller's D-pad reaches the game), and a button that loses the focus between mouse down and
+    -- mouse up drops the click (SButton::OnFocusLost releases it). With the engine's usual down-and-up clicks the arrows
+    -- therefore did nothing with the mouse. Set before the row is added, as the focus setting is read when it is built.
+    for _, name in ipairs(ARROW_BUTTONS) do
+        local ok, problem = pcall(function()
+            local arrow = widget.Spinner[name]
+            arrow:SetClickMethod(CLICK_ON_MOUSE_DOWN)
+            arrow.IsFocusable = false
+        end)
+        if not ok then
+            log("Could not set up the " .. name .. " of " .. row.label .. ": " .. tostring(problem))
+        end
+    end
     box:AddChild(widget)
     widget.TextBlock_91:SetText(FText(row.label))
     return widget:GetAddress()
