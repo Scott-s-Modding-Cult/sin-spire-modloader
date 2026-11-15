@@ -189,6 +189,27 @@
       "preset": false,
       "defaultOff": false,
       "alwaysOn": false
+    },
+    {
+      "id": "ModelStudio",
+      "title": "Model Studio",
+      "icon": "🎥",
+      "category": "Tools",
+      "summary": "A solo studio room for looking at your player from every side, with a sex scene preview.",
+      "details": "Main menu > Extras > Model Studio (or the Admin Panel's Model Studio tab) opens a grey studio room with a plinth and a 1 m floor grid. F5 or the middle mouse switches between first person, an orbit camera (mouse turns, wheel zooms, W/S raise and lower the view) and a freecam (WASD and mouse). F6 switches the pose between the game's idle and the rest pose, F7 turns a turntable on or off. The scene preview puts one of Free Mode's 18 characters in front of you with that character's own scene list, so the game runs its scenes as in Free Mode (W/S stages, D the next scene): pick the partner in the Admin Panel tab, then F9 or Start scene preview, and F9 or Stop to end it. Only the game's own scenes are listed. Keyboard and mouse only. Off by default: install it from Get Mods, then tick it in the Mods tab. Tested off screen; not yet played with graphics.",
+      "checked": "0.3.0 ce06a8400f77",
+      "stamp": "0.3.0 ce06a8400f77",
+      "version": "0.3.0",
+      "zip": "ModelStudio.zip",
+      "bytes": 1295066,
+      "sha": "ce06a8400f77",
+      "sha256": "ce06a8400f77f31221304f3078ce428f09e768454a2a2f3625c8237b8b6eb7bc",
+      "keys": [],
+      "requires": ["ModKit"],
+      "loadAfter": [],
+      "preset": false,
+      "defaultOff": true,
+      "alwaysOn": false
     }
   ]
 }
