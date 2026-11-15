@@ -231,6 +231,27 @@
       "preset": false,
       "defaultOff": false,
       "alwaysOn": false
+    },
+    {
+      "id": "SkinSwapper",
+      "title": "Skin Swapper",
+      "icon": "👕",
+      "category": "Tools",
+      "summary": "Wear your own outfits and bodies made in Blender: the in-game half of the Skin Kit, with the Blender exporter add-on included.",
+      "details": "Puts skins made with the Skin Kit on the player: a new body texture or a whole new body mesh, and outfit pieces (clothes, hair, accessories) that follow the body's bones. Pick the skin in the Admin Panel's Skins tab: Game default, any installed skin, or Live preview. Each piece can show in first person and stay on in sex scenes or come off there. Live preview shows a skin straight from Blender while the game runs. The mod folder's Blender folder holds the Sin Spire Skin Exporter add-on (Blender 4.2 or newer), which checks the model against the game's player rig and exports it; building an export into something the game loads also needs Unreal Engine 5.3 and the Skin Kit's build scripts, shared separately. Off by default: install it from Get Mods, then tick it in the Mods tab. Tested with a sample skin, including Live preview; first-person pieces not yet seen in play.",
+      "checked": "0.2.0 ad833d9d6b6b",
+      "stamp": "0.2.0 ad833d9d6b6b",
+      "version": "0.2.0",
+      "zip": "SkinSwapper.zip",
+      "bytes": 26570,
+      "sha": "ad833d9d6b6b",
+      "sha256": "ad833d9d6b6b9b8432636820029c3b8f03f198c3d6603ad66b6e026a957bd459",
+      "keys": [],
+      "requires": ["ModKit"],
+      "loadAfter": [],
+      "preset": false,
+      "defaultOff": true,
+      "alwaysOn": false
     }
   ]
 }
