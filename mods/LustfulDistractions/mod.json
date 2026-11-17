@@ -1,0 +1,12 @@
+{
+    "title": "Lustful Distractions",
+    "description": "Plant pairs and headcrab pairs busy with each other around each level, with volume sliders.",
+    "requires": [
+        "ModKit"
+    ],
+    "keys": [
+        "F9"
+    ],
+    "version": "1.0.0",
+    "preset": true
+}

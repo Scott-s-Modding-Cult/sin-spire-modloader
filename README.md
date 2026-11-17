@@ -26,11 +26,10 @@ The mods marked `preset` in `docs\mods\mods.json` are installed with the mod loa
 | Mod | What it does | Keys |
 | --- | --- | --- |
 | Admin Panel | Cheat panel, opened from a button in the pause menu | Esc |
-| Crab Pair | Headcrab pair distraction. Silent without Plant Distractor, whose sounds it uses | F9 |
 | Enemy Randomizer | Any regular enemy can appear at any dungeon spawn. Set it up in the admin panel or `mod-randomizer.json`, which is read at launch | |
 | Ghost Kiss | LostSoul kiss | |
+| Lustful Distractions | Plant and headcrab pairs busy with each other around each level, with volume sliders | F9 |
 | Monitor Setting | Adds a Monitor row to the video settings | |
-| Plant Distractor | Plant pair distraction placed in each level, with a volume slider | |
 
 These mods are adult content. `scripts\sync_mods.ps1` refreshes `mods\` from a game's `Mods` folder. It leaves out personal settings.
 

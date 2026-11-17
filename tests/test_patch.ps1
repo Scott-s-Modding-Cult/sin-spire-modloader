@@ -49,13 +49,13 @@ Check "only UE4SS's own mods are real folders" ($realFolders.Count -eq 9)
 Check "preset installed" (Test-Path "$fake\Mods\AdminPanel\Scripts\main.lua")
 Check "presets came from mods.json" ((Get-Content "$fake\Mods\.modloader\modloader.log" -Raw) -match "Installed Admin Panel")
 Check "credits installed" (Test-Path "$fake\Mods\CREDITS.txt")
-Check "preset pak linked" (Test-Path "$fake\SinSpire\Content\Paks\~mods\SinSpire-CrabPair_P.pak")
+Check "preset pak linked" (Test-Path "$fake\SinSpire\Content\Paks\~mods\SinSpire-LustfulDistractions-Plants_P.pak")
 Check "preset on by default is running" ((Get-Content "$win64\ue4ss\Mods\mods.txt") -contains "AdminPanel : 1")
 Check "mod off by default is listed but off" ((Test-Path "$fake\Mods\OffByDefault\mod.json") -and -not (Test-Path "$win64\ue4ss\Mods\OffByDefault"))
 Check "removed presets not shipped" (-not (Test-Path "$fake\Mods\CreeperPair") -and -not (Test-Path "$fake\Mods\BodyVisible"))
 Check "no personal settings in presets" (-not (Get-ChildItem "$fake\Mods" -Recurse -File -Include settings.txt, monitor.txt, monitors.txt, helper.log))
 Set-Content "$fake\Mods\AdminPanel\Scripts\main.lua" "-- edited by the player"
-Set-Content "$fake\Mods\CrabPair\settings.txt" "keep=1"
+Set-Content "$fake\Mods\LustfulDistractions\settings.txt" "keep=1"
 Check "original exe kept" ((Get-FileHash "$fake\SinSpire-Original.exe").Hash -eq $originalHash)
 Check "exe replaced" ((Get-Item "$fake\SinSpire.exe").VersionInfo.ProductName -eq "SinSpire Mod Loader")
 Check "the launcher is the Mod Manager itself" ((Get-FileHash "$fake\SinSpire.exe").Hash -eq (Get-FileHash $patch).Hash)
@@ -71,7 +71,7 @@ Set-Content "$win64\ue4ss\Mods\OldOn\settings.txt" "keep=1"
 "Exit: " + (Run-Patch "--patch")
 Check "repatch keeps original exe" ((Get-FileHash "$fake\SinSpire-Original.exe").Hash -eq $originalHash)
 Check "repatch keeps a newer mod file" ((Get-Content "$fake\Mods\AdminPanel\Scripts\main.lua") -eq "-- edited by the player")
-Check "repatch keeps player settings" ((Get-Content "$fake\Mods\CrabPair\settings.txt") -eq "keep=1")
+Check "repatch keeps player settings" ((Get-Content "$fake\Mods\LustfulDistractions\settings.txt") -eq "keep=1")
 Check "enabled mod is a junction" ((Get-Item "$win64\ue4ss\Mods\OldOn").Attributes -match "ReparsePoint")
 Check "settings reachable through junction" ((Get-Content "$win64\ue4ss\Mods\OldOn\settings.txt") -eq "keep=1")
 Check "enabled.txt stripped" (-not (Test-Path "$fake\Mods\OldOn\enabled.txt"))
@@ -84,13 +84,13 @@ Check "mods.txt keeps builtin flags" ($txt -contains "SplitScreenMod : 0")
 Check "Keybinds stays last" ($txt[-1] -eq "Keybinds : 1")
 
 # --- Each preset is given once: one the player removed stays removed, and an installed copy is never replaced.
-cmd /c rmdir /s /q "`"$fake\Mods\CrabPair`""
+cmd /c rmdir /s /q "`"$fake\Mods\LustfulDistractions`""
 $adminJson = "$fake\Mods\AdminPanel\mod.json"
 (Get-Content $adminJson -Raw) -replace '"version":\s*"[^"]*"', '"version": "9.9.9"' | Set-Content $adminJson
 "Exit: " + (Run-Patch "--patch")
-Check "removed preset not put back" (-not (Test-Path "$fake\Mods\CrabPair"))
+Check "removed preset not put back" (-not (Test-Path "$fake\Mods\LustfulDistractions"))
 Check "newer installed preset left alone" ((Get-Content $adminJson -Raw) -match '9\.9\.9')
-Check "given presets remembered" ((Get-Content "$fake\Mods\.modloader\presets.txt") -contains "CrabPair")
+Check "given presets remembered" ((Get-Content "$fake\Mods\.modloader\presets.txt") -contains "LustfulDistractions")
 # A game last patched by a patch that carried the presets itself: one missing now was removed on purpose.
 Remove-Item "$fake\Mods\.modloader\presets.txt"
 cmd /c rmdir /s /q "`"$fake\Mods\GhostKiss`""

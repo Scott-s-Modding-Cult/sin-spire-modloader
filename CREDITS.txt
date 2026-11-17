@@ -9,7 +9,7 @@ SOUNDS
 
 Shinlalala's Lewd Sound Pack (c) 2024 by Shinlalala
   Licence: CC BY-SA 4.0, https://creativecommons.org/licenses/by-sa/4.0/
-  Used in: Plant Distractor, Crab Pair (which plays Plant Distractor's copies)
+  Used in: Lustful Distractions (both the plants and the crabs)
   Changes: converted to WAV, renamed, and the swallow sounds are its wet sounds played at a lower pitch.
   These changed sounds are shared under the same licence.
 
@@ -22,12 +22,12 @@ Shinlalala's Lewd Sound Pack (c) 2024 by Shinlalala
 MODELS, TEXTURES AND ANIMATIONS
 
 Penis plant and mouth plant, from the game DreamLands, by its creators
-  Used in: Plant Distractor
+  Used in: Lustful Distractions
   Changes: re-rigged and re-animated, with new pairings.
   Licence terms not yet confirmed.
 
 Headcrab model by Likkez, https://twitter.com/likkezg, http://likkezg.com/
-  Used in: Crab Pair
+  Used in: Lustful Distractions
   Changes: re-posed and animated, with a darker material on one crab.
   Licence terms not yet confirmed.
 
@@ -37,7 +37,7 @@ OLL Animations (AP), an animation pack for WickedWhims (The Sims 4), by its crea
   Licence terms not yet confirmed.
 
 saliva_strings_v2.0.blend, author not yet identified
-  Used in: Plant Distractor
+  Used in: Lustful Distractions
   Changes: strands baked and re-rigged.
   Licence terms not yet confirmed.
 
