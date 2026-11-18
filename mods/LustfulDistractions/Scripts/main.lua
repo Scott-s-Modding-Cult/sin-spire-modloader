@@ -238,6 +238,74 @@ STRUGGLE_CLIMAX.min_wait_seconds, STRUGGLE_CLIMAX.max_wait_seconds = 30.0, 60.0
 local STRUGGLE_SLAM = slam_clip(PLANT_DIR, "AS_PlantStruggle_Slam", STRUGGLE_SLAM_SOUNDS, 3.5)
 STRUGGLE_SLAM.min_wait_seconds, STRUGGLE_SLAM.max_wait_seconds = 20.0, 40.0
 
+-- The deep pair hammers: one hard landing per thrust, with a drag back between them. The times come from the
+-- builder's own thrust plan, so the rhythm speeds up through the middle of the loop and eases off by the wrap, and
+-- the landings in the middle are the loud ones.
+local DEEP_LOOP_SOUNDS = {
+    { 0.242, "Stroke", 0.31 }, { 0.633, "Plap", 0.74 }, { 0.633, "Wet", 0.37 }, { 1.115, "Stroke", 0.31 },
+    { 1.496, "Plap", 0.75 }, { 1.496, "Wet", 0.37 }, { 1.962, "Stroke", 0.32 }, { 2.326, "Plap", 0.76 },
+    { 2.326, "Wet", 0.38 }, { 2.767, "Stroke", 0.33 }, { 3.110, "Plap", 0.78 }, { 3.110, "Wet", 0.39 },
+    { 3.525, "Stroke", 0.33 }, { 3.847, "Plap", 0.80 }, { 3.847, "Wet", 0.40 }, { 4.236, "Stroke", 0.34 },
+    { 4.537, "Plap", 0.82 }, { 4.537, "Wet", 0.41 }, { 4.902, "Stroke", 0.35 }, { 5.185, "Plap", 0.84 },
+    { 5.185, "Wet", 0.42 }, { 5.528, "Stroke", 0.36 }, { 5.796, "Plap", 0.86 }, { 5.796, "Wet", 0.43 },
+    { 6.120, "Stroke", 0.37 }, { 6.373, "Plap", 0.87 }, { 6.373, "Wet", 0.44 }, { 6.682, "Stroke", 0.37 },
+    { 6.923, "Plap", 0.89 }, { 6.923, "Wet", 0.45 }, { 7.218, "Stroke", 0.38 }, { 7.449, "Plap", 0.91 },
+    { 7.449, "Wet", 0.45 }, { 7.731, "Stroke", 0.39 }, { 7.954, "Plap", 0.92 }, { 7.954, "Wet", 0.46 },
+    { 8.227, "Stroke", 0.39 }, { 8.442, "Plap", 0.94 }, { 8.442, "Wet", 0.47 }, { 8.706, "Stroke", 0.40 },
+    { 8.914, "Plap", 0.95 }, { 8.914, "Wet", 0.48 }, { 9.171, "Stroke", 0.40 }, { 9.375, "Plap", 0.96 },
+    { 9.375, "Wet", 0.48 }, { 9.625, "Stroke", 0.41 }, { 9.824, "Plap", 0.97 }, { 9.824, "Wet", 0.49 },
+    { 10.070, "Stroke", 0.41 }, { 10.265, "Plap", 0.98 }, { 10.265, "Wet", 0.49 }, { 10.507, "Stroke", 0.41 },
+    { 10.700, "Plap", 0.99 }, { 10.700, "Wet", 0.49 }, { 10.938, "Stroke", 0.42 }, { 11.128, "Plap", 0.99 },
+    { 11.128, "Wet", 0.50 }, { 11.364, "Stroke", 0.42 }, { 11.552, "Plap", 1.00 }, { 11.552, "Wet", 0.50 },
+    { 11.786, "Stroke", 0.42 }, { 11.974, "Plap", 1.00 }, { 11.974, "Wet", 0.50 }, { 12.207, "Stroke", 0.42 },
+    { 12.393, "Plap", 1.00 }, { 12.393, "Wet", 0.50 }, { 12.626, "Stroke", 0.42 }, { 12.813, "Plap", 1.00 },
+    { 12.813, "Wet", 0.50 }, { 13.046, "Stroke", 0.42 }, { 13.233, "Plap", 1.00 }, { 13.233, "Wet", 0.50 },
+    { 13.467, "Stroke", 0.42 }, { 13.656, "Plap", 0.99 }, { 13.656, "Wet", 0.50 }, { 13.891, "Stroke", 0.42 },
+    { 14.081, "Plap", 0.99 }, { 14.081, "Wet", 0.49 }, { 14.320, "Stroke", 0.41 }, { 14.512, "Plap", 0.98 },
+    { 14.512, "Wet", 0.49 }, { 14.753, "Stroke", 0.41 }, { 14.948, "Plap", 0.98 }, { 14.948, "Wet", 0.49 },
+    { 15.194, "Stroke", 0.41 }, { 15.393, "Plap", 0.97 }, { 15.393, "Wet", 0.48 }, { 15.643, "Stroke", 0.40 },
+    { 15.846, "Plap", 0.96 }, { 15.846, "Wet", 0.48 }, { 16.103, "Stroke", 0.40 }, { 16.311, "Plap", 0.94 },
+    { 16.311, "Wet", 0.47 }, { 16.575, "Stroke", 0.39 }, { 16.790, "Plap", 0.93 }, { 16.790, "Wet", 0.47 },
+    { 17.062, "Stroke", 0.39 }, { 17.284, "Plap", 0.92 }, { 17.284, "Wet", 0.46 }, { 17.566, "Stroke", 0.38 },
+    { 17.797, "Plap", 0.90 }, { 17.797, "Wet", 0.45 }, { 18.091, "Stroke", 0.37 }, { 18.331, "Plap", 0.88 },
+    { 18.331, "Wet", 0.44 }, { 18.639, "Stroke", 0.36 }, { 18.892, "Plap", 0.87 }, { 18.892, "Wet", 0.43 },
+    { 19.215, "Stroke", 0.36 }, { 19.482, "Plap", 0.85 }, { 19.482, "Wet", 0.42 }, { 19.824, "Stroke", 0.35 },
+    { 20.106, "Plap", 0.83 }, { 20.106, "Wet", 0.41 }, { 20.469, "Stroke", 0.34 }, { 20.770, "Plap", 0.81 },
+    { 20.770, "Wet", 0.40 }, { 21.157, "Stroke", 0.33 }, { 21.478, "Plap", 0.79 }, { 21.478, "Wet", 0.39 },
+    { 21.892, "Stroke", 0.32 }, { 22.234, "Plap", 0.77 }, { 22.234, "Wet", 0.39 }, { 22.674, "Stroke", 0.32 },
+    { 23.037, "Plap", 0.76 }, { 23.037, "Wet", 0.38 }, { 23.501, "Stroke", 0.31 }, { 23.881, "Plap", 0.75 },
+    { 23.881, "Wet", 0.37 }, { 24.363, "Stroke", 0.31 }, { 24.754, "Plap", 0.74 }, { 24.754, "Wet", 0.37 },
+}
+local DEEP_SLAM_SOUNDS = {
+    { 0.750, "Plap", 1.00 }, { 0.750, "Wet", 0.85 }, { 1.150, "Stroke", 0.50 }, { 1.560, "Stroke", 0.38 },
+}
+local DEEP_CLIMAX_SOUNDS = {
+    { 0.400, "Plap", 0.60 }, { 1.200, "Plap", 0.80 }, { 2.000, "Plap", 1.00 }, { 2.000, "Wet", 0.80 }, -- Three hard drives.
+    { 2.583, "Cum", 1.00 }, { 3.083, "Cum", 0.90 }, { 3.667, "Cum", 0.80 }, { 4.333, "Cum", 0.65 }, { 5.083, "Cum", 0.50 },
+    { 4.167, "Wet", 0.30 }, { 4.667, "Wet", 0.30 }, { 5.250, "Wet", 0.30 }, { 5.917, "Wet", 0.30 }, { 6.667, "Wet", 0.30 }, -- Each drip letting go.
+    { 6.500, "Stroke", 0.45 }, { 7.200, "Stroke", 0.35 },
+}
+-- The knotting pair cannot move much: a slow throb while they are stuck, and strain when they pull against it.
+local KNOT_LOOP_SOUNDS = {
+    { 0.521, "Wet", 0.35 }, { 0.700, "Stroke", 0.22 }, { 1.563, "Wet", 0.38 }, { 1.740, "Stroke", 0.24 },
+    { 2.604, "Wet", 0.35 }, { 2.780, "Stroke", 0.22 }, { 3.646, "Wet", 0.40 }, { 3.820, "Stroke", 0.25 },
+    { 4.688, "Wet", 0.35 }, { 4.860, "Stroke", 0.22 }, { 5.729, "Wet", 0.38 }, { 5.900, "Stroke", 0.24 },
+    { 6.771, "Wet", 0.35 }, { 6.940, "Stroke", 0.22 }, { 7.813, "Wet", 0.40 }, { 7.980, "Stroke", 0.25 },
+}
+local KNOT_TUG_SOUNDS = {
+    { 0.300, "Stroke", 0.40 }, { 0.650, "Stroke", 0.55 }, -- Taking up the slack.
+    { 1.000, "Wet", 0.95 }, { 1.000, "Plap", 0.45 }, -- The ring stretched out as far as it goes.
+    { 1.380, "Plap", 0.70 }, { 1.380, "Wet", 0.55 }, -- And dragged back onto it.
+    { 1.650, "Stroke", 0.35 },
+}
+local KNOT_CLIMAX_SOUNDS = {
+    { 1.042, "Wet", 0.80 }, { 1.042, "Plap", 0.40 }, -- Three pulls against the lock as it takes them.
+    { 3.125, "Wet", 0.90 }, { 3.125, "Plap", 0.50 },
+    { 5.208, "Wet", 0.85 }, { 5.208, "Plap", 0.45 },
+    { 2.583, "Cum", 1.00 }, { 3.083, "Cum", 0.90 }, { 3.667, "Cum", 0.80 }, { 4.333, "Cum", 0.65 }, { 5.083, "Cum", 0.50 },
+    { 6.500, "Stroke", 0.35 }, { 7.200, "Stroke", 0.28 },
+}
+
 -- Every kind of pair. "align" says how the mesh is lined up on its spot: "pair" centres it between two root bones,
 -- and "front" stands one root bone on the spot, facing the way the front bone lies. "weight" is how often it is
 -- picked; the crabs together come up about as often as the four plant kinds together.
@@ -280,6 +348,27 @@ local KINDS = {
         clips = {
             { key = "climax", clip = STRUGGLE_CLIMAX },
             { key = "slam", clip = STRUGGLE_SLAM },
+        },
+    },
+    {
+        name = "deep pair", family = "plant", weight = 1.0, volume = plant_volume, room = PLANT_ROOM, scale = PAIR_SCALE,
+        mesh_dir = PLANT_DIR, mesh = "SK_PlantDeep", loop = "AS_PlantDeep_Loop", loop_dir = PLANT_DIR,
+        loop_sounds = DEEP_LOOP_SOUNDS, sound_bone = "B_DEF-PenisMid_Tip", loop_seconds = 25.0,
+        align = { mode = "pair", root_bones = { "PlantA_Root", "PlantB_Root" } },
+        clips = {
+            { key = "climax", clip = climax_clip(PLANT_DIR, "AS_PlantDeep_Climax", DEEP_CLIMAX_SOUNDS, 0.1667) },
+            { key = "slam", clip = slam_clip(PLANT_DIR, "AS_PlantDeep_Slam", DEEP_SLAM_SOUNDS, 3.5) },
+        },
+    },
+    {
+        name = "knotting pair", family = "plant", weight = 1.0, volume = plant_volume, room = PLANT_ROOM, scale = PAIR_SCALE,
+        mesh_dir = PLANT_DIR, mesh = "SK_PlantKnot", loop = "AS_PlantKnot_Loop", loop_dir = PLANT_DIR,
+        loop_sounds = KNOT_LOOP_SOUNDS, sound_bone = "B_DEF-PenisMid_Tip",
+        align = { mode = "pair", root_bones = { "PlantA_Root", "PlantB_Root" } },
+        clips = {
+            { key = "climax", clip = climax_clip(PLANT_DIR, "AS_PlantKnot_Climax", KNOT_CLIMAX_SOUNDS, 0.1667) },
+            -- Its slam is a tug: they pull against the lock and it holds.
+            { key = "slam", clip = slam_clip(PLANT_DIR, "AS_PlantKnot_Slam", KNOT_TUG_SOUNDS, 3.5) },
         },
     },
     {
@@ -585,7 +674,7 @@ local function spawn_pair(kind, target, heading)
     component:PlayAnimation(anim, true)
     arrange(actor, component, kind, target, heading)
     -- Pairs start at different points in the loop, so they never move in step.
-    local start = random_between(0.0, LOOP_SECONDS)
+    local start = random_between(0.0, kind.loop_seconds or LOOP_SECONDS)
     component:SetPosition(start, false)
     local pair = { address = actor:GetAddress(), kind = kind, clip = nil, clip_key = nil, sound_position = start,
         clocks = {}, forced = {} }
